@@ -1,0 +1,6 @@
+node_modules/
+dist/
+*.xpi
+.env
+*.key
+.DS_Store
