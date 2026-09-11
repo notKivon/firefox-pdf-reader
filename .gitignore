@@ -4,3 +4,4 @@ dist/
 .env
 *.key
 .DS_Store
+.idea/

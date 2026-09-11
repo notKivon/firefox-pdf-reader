@@ -1,0 +1,42 @@
+{
+  "manifest_version": 3,
+  "name": "Scholar Reader",
+  "version": "0.1.0",
+  "description": "Replaces the built-in PDF viewer with a two-pane academic reader: paper left, section outline right.",
+  "browser_specific_settings": {
+    "gecko": {
+      "id": "scholar-reader@kevin.local",
+      "strict_min_version": "140.0",
+      "data_collection_permissions": {
+        "required": [
+          "none"
+        ]
+      }
+    }
+  },
+  "background": {
+    "scripts": [
+      "background.js"
+    ]
+  },
+  "permissions": [
+    "webRequest",
+    "webRequestBlocking",
+    "storage",
+    "unlimitedStorage",
+    "tabs"
+  ],
+  "host_permissions": [
+    "<all_urls>"
+  ],
+  "web_accessible_resources": [
+    {
+      "resources": [
+        "viewer.html"
+      ],
+      "matches": [
+        "<all_urls>"
+      ]
+    }
+  ]
+}

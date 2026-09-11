@@ -1,8 +1,8 @@
 # Scholar Reader — Build Progress
 
-**Current step:** 1 — Scaffold and loadable extension shell
+**Current step:** 1 — Scaffold and loadable extension shell (built and linted; awaiting the Zen load check)
 **Next step:** 2 — PDF interception and pdf.js viewer
-**Last verified healthy:** not yet built
+**Last verified healthy:** 2026-09-11 — `npm run build` emits `dist/`, `web-ext lint` reports 0 errors, `npm run check:secrets` clean
 
 ## Checklist
 
@@ -26,6 +26,10 @@
 Quota meter UI and model dropdown (step 9 gives the accounting and automatic fallback; the on-screen `n/20 today` readout and manual model selector are a later addition). Fit modes, keyboard navigation. Figure and table popups, inline citation previews — both cut from scope deliberately.
 
 ## Decisions & gotchas
+- 2026-09-11 — Bundles are built as `iife`, not `esm`. An MV3 background script loads as a classic script unless the manifest opts into modules, and esbuild bundles everything into one file anyway, so the module plumbing buys nothing.
+- 2026-09-11 — `check:secrets` fails on **key-shaped** matches (`AIza…`, `sk-` + 16 or more key characters) and only warns on a bare `sk-`. A bare-substring match would fire on ordinary words inside bundled pdf.js ("task-", "risk-") from step 2 on, which would make the gate useless. Gate tested by planting a dummy key in `dist/`: exit 1 with the key, exit 0 without.
+- 2026-09-11 — `strict_min_version` is `140.0`, not 128: AMO now requires `browser_specific_settings.gecko.data_collection_permissions` (declared as `none`), which Firefox only understands from 140. Zen 1.22b on this machine is Gecko 155.0.1, so this costs nothing. The one remaining lint warning is about Firefox for Android and is irrelevant — the target is desktop.
+- 2026-09-11 — `src/extract`, `src/model`, `src/store` and `src/settings` exist locally but are empty, so git does not track them yet; they appear in the commit for the step that first puts a file in them.
 - 2026-09-07 — Tier 3 build: the Gemini API key is a real secret, and there are three external dependencies (Gemini, Ollama, AMO).
 - 2026-09-07 — Chunking strategy is a provider property, not a global constant. The 20-requests-per-day free tier forces `whole-document`; a per-token provider would prefer `per-section`. Callers must never loop over sections themselves or this leaks upward and makes provider swaps into refactors.
 - 2026-09-07 — All provider calls happen in the background script. Extension background fetches for hosts in `host_permissions` bypass CORS; Gemini's endpoints do not reliably send CORS headers, so calling from the viewer page would fail.
