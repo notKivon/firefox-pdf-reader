@@ -36,6 +36,7 @@ function finishLine(group, column, pageNumber) {
     // The baseline in PDF user space — what scrollPageIntoView's XYZ wants.
     pdfY: items[0].pdfY,
     fontName: items[0].fontName,
+    fontFamily: items[0].fontFamily ?? "",
     column,
     page: pageNumber,
     items,

@@ -266,6 +266,23 @@ body {
   white-space: nowrap;
 }
 
+/* Characters of body text carried by a section — the size of what step 7 will
+   send to a model. */
+.debug-size {
+  flex: 0 0 auto;
+  color: var(--text-dim);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+
+.debug-sections-box {
+  border-top: none;
+}
+
+.debug-sections-box .debug-col {
+  flex: 0 0 22px;
+}
+
 /* Non-fatal store or model problems; the paper itself still reads. */
 .pane-note {
   margin: 0 0 12px;

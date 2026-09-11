@@ -35,6 +35,9 @@ export async function extractPageItems(pdfDoc, pageNumber) {
   const viewport = page.getViewport({ scale: 1 });
   const rotated = viewport.rotation % 180 !== 0;
   const content = await page.getTextContent();
+  // `item.fontName` is an internal id ("g_d0_f1"); the real family, which is
+  // where "Bold" shows up, only exists in the styles map.
+  const styles = content.styles ?? {};
 
   const items = [];
   const sideways = [];
@@ -51,6 +54,7 @@ export async function extractPageItems(pdfDoc, pageNumber) {
       width,
       height,
       fontName: item.fontName ?? "",
+      fontFamily: styles[item.fontName]?.fontFamily ?? "",
       hasEOL: !!item.hasEOL,
       pdfY: item.transform[5],
     };
@@ -103,6 +107,30 @@ export function modalHeight(items) {
     if (count > bestCount || (count === bestCount && bucket < best)) {
       best = bucket;
       bestCount = count;
+    }
+  }
+  return best;
+}
+
+// The font most of the document is set in, weighted by characters so a few
+// long body runs outweigh many short ones.
+//
+// pdf.js never exposes a real font name — `styles[].fontFamily` is only ever
+// "serif"/"sans-serif"/"monospace" — so SPEC's `/bold|black|semibold/i` test
+// cannot be implemented. This is the same signal by another route: a heading is
+// set in a face that is *not* the body face, whatever that face is called.
+export function modalFontName(pages) {
+  const chars = new Map();
+  let best = "";
+  let bestCount = 0;
+  for (const page of pages) {
+    for (const item of page.items) {
+      const count = (chars.get(item.fontName) ?? 0) + item.str.length;
+      chars.set(item.fontName, count);
+      if (count > bestCount) {
+        best = item.fontName;
+        bestCount = count;
+      }
     }
   }
   return best;
