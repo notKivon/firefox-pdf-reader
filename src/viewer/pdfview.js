@@ -9,7 +9,7 @@ GlobalWorkerOptions.workerSrc = asset("pdf.worker.mjs");
 
 const ZOOM_STEPS = [0.5, 0.67, 0.8, 0.9, 1, 1.1, 1.25, 1.5, 1.75, 2, 2.5, 3];
 
-async function fetchPdf(url) {
+export async function fetchPdf(url) {
   const host = new URL(url).host;
   let response;
   try {
@@ -39,10 +39,16 @@ export function createPdfView({ container, viewerEl, onPageChange, onScaleChange
   linkService.setViewer(pdfViewer);
 
   let pdfDocument = null;
+  let pagesReady = false;
+  const readyWaiters = [];
 
   eventBus.on("pagesinit", () => {
     pdfViewer.currentScaleValue = "page-width";
     onPageChange?.(pdfViewer.currentPageNumber, pdfViewer.pagesCount);
+    // Page heights are only meaningful once the scale above is applied, so
+    // anything that measures or restores scroll offsets waits for this.
+    pagesReady = true;
+    for (const fn of readyWaiters.splice(0)) runWaiter(fn);
   });
   eventBus.on("pagechanging", (e) => {
     onPageChange?.(e.pageNumber, pdfViewer.pagesCount);
@@ -61,8 +67,23 @@ export function createPdfView({ container, viewerEl, onPageChange, onScaleChange
   });
   resizeObserver.observe(container);
 
-  async function load(url) {
-    const bytes = await fetchPdf(url);
+  function runWaiter(fn) {
+    try {
+      fn();
+    } catch (err) {
+      console.error("[scholar-reader] pages-ready handler failed", err);
+    }
+  }
+
+  // Runs fn once the first layout exists, immediately if that already happened.
+  function whenReady(fn) {
+    if (pagesReady) runWaiter(fn);
+    else readyWaiters.push(fn);
+  }
+
+  // Takes the bytes rather than a URL: the caller has already fetched them to
+  // compute the document hash, and pdf.js may detach the buffer from here on.
+  async function load(bytes) {
     let doc;
     try {
       doc = await getDocument({
@@ -94,6 +115,27 @@ export function createPdfView({ container, viewerEl, onPageChange, onScaleChange
     });
   }
 
+  // scrollHeight rides along because an exact offset only means anything at the
+  // layout that produced it.
+  function position() {
+    return {
+      page: pdfViewer.currentPageNumber,
+      scrollTop: container.scrollTop,
+      scrollHeight: container.scrollHeight,
+    };
+  }
+
+  function restorePosition(pos) {
+    if (!pos || !pdfDocument) return;
+    if (pos.scrollHeight && pos.scrollHeight === container.scrollHeight) {
+      container.scrollTop = pos.scrollTop;
+    } else if (pos.page > 1) {
+      // A different window width rescales every offset; the page number is the
+      // part that survives, so fall back to it rather than landing at random.
+      pdfViewer.currentPageNumber = Math.min(pos.page, pdfViewer.pagesCount);
+    }
+  }
+
   function zoomBy(direction) {
     const current = pdfViewer.currentScale;
     const steps = direction > 0 ? ZOOM_STEPS : [...ZOOM_STEPS].reverse();
@@ -107,5 +149,17 @@ export function createPdfView({ container, viewerEl, onPageChange, onScaleChange
     pdfDocument = null;
   }
 
-  return { load, scrollToSection, zoomBy, destroy, eventBus, get document() { return pdfDocument; } };
+  return {
+    load,
+    whenReady,
+    position,
+    restorePosition,
+    scrollToSection,
+    zoomBy,
+    destroy,
+    eventBus,
+    get document() {
+      return pdfDocument;
+    },
+  };
 }

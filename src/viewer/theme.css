@@ -163,6 +163,20 @@ body {
   color: var(--text-dim);
 }
 
+/* Non-fatal store or model problems; the paper itself still reads. */
+.pane-note {
+  margin: 0 0 12px;
+  padding: 8px 10px;
+  border: 1px solid var(--danger);
+  border-radius: 6px;
+  background: var(--bg-raised);
+  color: var(--danger);
+}
+
+.pane-note[hidden] {
+  display: none;
+}
+
 /* pdf.js draws its own page shadow; reuse the theme's. */
 .pdfViewer .page {
   --page-box-shadow: 0 2px 8px var(--shadow);

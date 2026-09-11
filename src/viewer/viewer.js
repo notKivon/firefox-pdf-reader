@@ -1,6 +1,9 @@
 // Viewer entry point: boots the PDF pane and wires the reading chrome.
-import { createPdfView } from "./pdfview.js";
+import { createPdfView, fetchPdf } from "./pdfview.js";
 import { initTheme } from "./theme.js";
+import { recordOpen, readingPosition, saveReadingPosition, sha256Hex } from "../store/docs.js";
+
+const SAVE_DEBOUNCE_MS = 600;
 
 const els = {
   container: document.getElementById("viewerContainer"),
@@ -8,6 +11,7 @@ const els = {
   status: document.getElementById("pdf-status"),
   statusTitle: document.querySelector("#pdf-status .status-title"),
   statusDetail: document.querySelector("#pdf-status .status-detail"),
+  note: document.getElementById("pane-note"),
   title: document.getElementById("doc-title"),
   page: document.getElementById("page-indicator"),
   zoom: document.getElementById("zoom-level"),
@@ -27,6 +31,13 @@ function hideStatus() {
   els.status.hidden = true;
 }
 
+// Non-fatal problems: the paper still reads, so they belong beside the outline
+// rather than over the page.
+function showNote(text) {
+  els.note.textContent = text;
+  els.note.hidden = false;
+}
+
 function documentName(url) {
   try {
     const { pathname, host } = new URL(url);
@@ -35,6 +46,51 @@ function documentName(url) {
   } catch {
     return url;
   }
+}
+
+function debounce(fn, ms) {
+  let timer = null;
+  const run = () => {
+    timer = null;
+    fn();
+  };
+  const wrapped = () => {
+    clearTimeout(timer);
+    timer = setTimeout(run, ms);
+  };
+  wrapped.flush = () => {
+    if (timer !== null) {
+      clearTimeout(timer);
+      run();
+    }
+  };
+  return wrapped;
+}
+
+function setDocumentTitle(name) {
+  els.title.textContent = name;
+  document.title = `${name} — Scholar Reader`;
+}
+
+// Restores where the reader left off, then keeps the record up to date.
+function trackReadingPosition(view, hash, position) {
+  const save = debounce(() => {
+    saveReadingPosition(hash, view.position()).catch((err) => {
+      console.warn("[scholar-reader] reading position not saved", err);
+      showNote(`Reading position is not being saved: ${err.message}`);
+    });
+  }, SAVE_DEBOUNCE_MS);
+
+  view.whenReady(() => {
+    view.restorePosition(position);
+    // Attached only after the restore, so the pristine top-of-document position
+    // never overwrites the saved one.
+    els.container.addEventListener("scroll", save, { passive: true });
+    window.addEventListener("pagehide", () => save.flush());
+    document.addEventListener("visibilitychange", () => {
+      if (document.visibilityState === "hidden") save.flush();
+    });
+  });
 }
 
 async function main() {
@@ -46,15 +102,14 @@ async function main() {
     return;
   }
 
-  els.title.textContent = documentName(file);
-  document.title = `${documentName(file)} — Scholar Reader`;
+  setDocumentTitle(documentName(file));
   showStatus("Loading…", documentName(file));
 
   const view = createPdfView({
     container: els.container,
     viewerEl: els.viewer,
     onPageChange: (page, total) => {
-      els.page.textContent = `${page} / ${total}`;
+      els.page.textContent = `${page} / ${total}`;
     },
     onScaleChange: (scale) => {
       els.zoom.textContent = `${Math.round(scale * 100)}%`;
@@ -64,12 +119,31 @@ async function main() {
   els.zoomIn.addEventListener("click", () => view.zoomBy(1));
   els.zoomOut.addEventListener("click", () => view.zoomBy(-1));
 
+  let doc;
+  let hash;
   try {
-    await view.load(file);
+    const bytes = await fetchPdf(file);
+    // Hashed before loading: pdf.js may transfer the buffer to its worker and
+    // leave it detached.
+    hash = await sha256Hex(bytes);
+    doc = await view.load(bytes);
     hideStatus();
   } catch (err) {
     console.error("[scholar-reader] load failed", err);
     showStatus("This PDF could not be opened", err.message, true);
+    return;
+  }
+
+  // Identity and history are a separate failure domain from rendering: a broken
+  // IndexedDB must not cost the reader the paper.
+  try {
+    const record = await recordOpen({ hash, url: file, pdfDoc: doc });
+    console.info(`[scholar-reader] document ${hash} — ${record.urls.length} url(s) on record`);
+    setDocumentTitle(record.title);
+    trackReadingPosition(view, hash, readingPosition(record));
+  } catch (err) {
+    console.error("[scholar-reader] document store unavailable", err);
+    showNote(`Reading position and outlines cannot be stored: ${err.message}`);
   }
 }
 
