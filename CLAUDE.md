@@ -42,23 +42,33 @@ This file loads every session. Implementation detail is in **SPEC.md**; live bui
 - A document whose extracted text is under 200 characters per page on average is treated as a **scanned PDF**: the outline pane says so plainly and no model call is made. OCR is out of scope.
 - Hard cap of 40 sections per document.
 
+### Send confirmation (no document reaches a model unasked)
+- **No document's text is sent to any model until the user confirms it for that document.** This holds for every provider, including the local Ollama one — the rule is one rule, with no loopback exemption.
+- Consent is granted **per cache key** (`sha256:providerId:model:strategy:promptVersion`) and persisted. So: approval covers that paper from any URL and survives reopening, and a request aimed at a different provider, model, strategy or prompt version asks again, because it is a different thing being sent somewhere.
+- The confirmation is a **state of the outline pane**, never `window.confirm` or any other modal dialog. It states what would be sent and where: title, page count, section count, approximate token count, provider label, model id, and whether the text leaves the machine.
+- **The gate is enforced in the background router**, which is the only place provider calls happen. The router reads the consent record itself and refuses an outline request that has none. A viewer that forgets to ask cannot cause a send.
+- A **cache hit renders with no confirmation** — nothing leaves, so there is nothing to confirm. Likewise a scanned PDF or an empty section: no call, no card.
+- **Automatic fallback may only cross to a provider with the same `destination`.** Consent is to a destination, not merely to a provider id; falling back from `gemini-prod` to `gemini-dev` is the same text going to the same company, so the original consent covers it. Reaching a different destination — notably the local model — requires its own confirmation, offered as an explicit control in the pane.
+
 ### Outline generation
 - Output is always: per section, **2–4 bullets, each at most 20 words**, extractive — restating what the section says, never inferring beyond it. Plus one whole-document TL;DR of at most 2 sentences.
 - Results-type sections must carry the actual reported numbers where the section states them.
 - The model returns JSON matching the schema in SPEC.md. Prose parsing is never a fallback; a malformed response is an error surfaced to the user.
 - Every bullet carries the `page` and `y` of its section so the viewer can scroll to it.
+- **`page`/`y` come from the extracted section at that index, never from the model.** The model echoes each section's `title`, which is compared against the input title as a checksum. A section-count or title mismatch is a malformed response — an error surfaced to the user, not a best-effort render. Misaligned bullets would scroll to the wrong place with nothing to indicate it, and a cached outline is served thereafter with no confirmation and no network request, so a slip that is not caught here is permanent.
 
 ### Chunking strategy is a property of the provider, not of the task
 - The application calls `outline(document)` and receives sections. **It never loops over sections itself.**
 - Each provider descriptor declares `strategy`:
-  - `"whole-document"` — one request carrying the entire paper. Required when a provider has a low requests-per-day cap.
-  - `"per-section"` — one request per section, streamed as each completes. For providers billed per token with no meaningful request cap.
+  - `"whole-document"` — one request carrying the entire paper. Cheapest in tokens, one TL;DR written with the whole paper in context, and one request to account for. This is what `gemini-prod` uses.
+  - `"per-section"` — one request per section, dispatched with bounded concurrency and streamed as each completes. Fills the pane progressively and isolates a failure to one section, at the cost of repeating the prompt per request. This is what `gemini-dev` and `ollama` use.
 - Changing strategy changes the cache key, because the two produce different artifacts.
 
 ### Provider quota accounting
-- A provider descriptor may declare `limits: { rpd, rpm }`.
+- A provider descriptor may declare `limits: { rpd, rpm }` and must declare a `destination` (`"google"`, `"local"`, …) — the party the text reaches. Consent and fallback are both scoped by it.
 - Google's free-tier daily quota resets at **midnight US Pacific Time**, not local time. The quota day is therefore the calendar date produced by `Intl.DateTimeFormat('en-CA', { timeZone: 'America/Los_Angeles' })`, which tracks Pacific DST automatically. Counters are keyed by that string.
-- When a request would exceed `rpd`, or a call returns HTTP 429, the adapter **falls back to the next configured provider** rather than failing. If no fallback is configured, the outline pane states which provider is exhausted and when its quota resets, in Asia/Hong_Kong time.
+- When a request would exceed `rpd`, or a call returns HTTP 429, the adapter **falls back to the next configured provider of the same `destination`** rather than failing. When the chain for that destination is exhausted, the outline pane states which provider is exhausted and when its quota resets, in Asia/Hong_Kong time, and offers any other-destination provider as an explicit choice.
+- **The local model is never an automatic fallback target.** Gemini is the default and serves every automatic path; Ollama is used only when the user selects it — in settings, or from the control the exhausted-provider message offers. This is a user preference, not an incidental consequence of the fallback list.
 
 ### Caching
 - Cache key: `sha256:providerId:model:strategy:promptVersion`.

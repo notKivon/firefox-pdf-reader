@@ -69,7 +69,7 @@ the extension is loaded temporarily and **is lost on every browser restart**.
 3. **Load Temporary Add-on…** → select `dist/manifest.json`
 4. Reload after each rebuild with the **Reload** button on the extension's card
 
-Permanent installation requires AMO *unlisted* signing — that's step 15, and it's
+Permanent installation requires AMO *unlisted* signing — that's step 16, and it's
 only worth doing once the extension is stable, since each release needs another
 round trip.
 
@@ -96,5 +96,5 @@ sources, so a key pasted into a source file or a fixture would slip past it.
 On a public repo that is unrecoverable by deletion: a pushed key must be
 treated as burned and rotated at aistudio.google.com, not just removed.
 
-Worth tightening at step 13, when `settings.js` starts handling the key for
+Worth tightening at step 14, when `settings.js` starts handling the key for
 real and a stray `console.log` becomes the likely slip.

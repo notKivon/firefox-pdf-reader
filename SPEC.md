@@ -15,6 +15,7 @@ src/
     viewer.js        entry: boots PDFViewer, wires panes
     pdfview.js       pdfjs-dist PDFViewer setup, scrollToSection(), theme
     outline-pane.js  renders sections/bullets, click-to-jump, scroll-spy
+    confirm-card.js  the send-confirmation state of the outline pane
     theme.css        :root dark tokens + [data-theme="light"] override
   extract/
     textlayer.js     getTextContent → positioned items
@@ -29,6 +30,7 @@ src/
     db.js            IndexedDB open/upgrade
     docs.js          document records, reading position
     outlines.js      outline cache, cache key construction
+    consent.js       per-cache-key send consent records
     quota.js         per-provider request counters keyed by Pacific date
   settings/
     settings.html    key entry, provider selection, origin opt-out
@@ -46,8 +48,24 @@ manifest.json
 - Exposes `shouldIntercept(details) → boolean` as a pure function so it is unit-testable without the browser.
 
 ## background/router.js
-- `runtime.onMessage` handles `{type: "outline", hash, sections, meta}` and `{type: "quota"}`.
+- `runtime.onMessage` handles `{type: "outline", hash, sections, meta}`, `{type: "plan", hash, sections, meta}` and `{type: "quota"}`.
+- `plan` is the confirmation's data source: it resolves the provider, builds the cache key, checks the cache and the consent record, and returns `{cacheHit, consented, cacheKey, providerId, model, destination, label, strategy, sectionCount, chars, estTokens, estCost}` **without making any network request**. The viewer renders either the outline (cache hit), the confirm card (no consent), or the spinner (consented already).
+- `outline` **refuses to call a provider unless `store/consent.js` holds a record for the cache key it is about to use** — the check is here, not in the viewer, per CLAUDE.md's send-confirmation rule. Refusal returns `{error: "consent-required", plan}` so the pane can render the card rather than an error.
+- A fallback that would change `destination` mid-run aborts with `{error: "consent-required", plan}` for the new destination instead of sending.
 - **All provider fetches originate here.** Extension background fetches for hosts in `host_permissions` are not subject to CORS; the viewer page's fetches would be. This is why the viewer never calls a provider directly, and why no API key is ever sent to the viewer context.
+
+## viewer/confirm-card.js
+The outline pane's first state for any document with no consent record. Implements CLAUDE.md's send-confirmation rule; it is a pane state, not a dialog.
+
+- `render(plan, { onConfirm, onPickProvider })` draws, from the router's `plan` response:
+  - document title and page count;
+  - `N sections · ~M tokens` (characters ÷ 4, stated as approximate — a real tokeniser is not worth bundling for a number shown to one reader);
+  - the destination in words: `"Sent to Google (Gemini 3.8 Flash)"` or `"Stays on this machine (Gemma 4 E4B, 127.0.0.1)"`;
+  - estimated cost when the descriptor carries `pricing`, rendered to one decimal of a cent and marked `est.`;
+  - a primary **Generate outline** button, and a secondary control listing the other-destination providers so the local model can be chosen deliberately.
+- `onConfirm` writes the consent record **before** sending, so a crash mid-request cannot lose the grant and re-ask.
+- Section titles are listed in a collapsed `<details>` — "what exactly gets sent" is the question the card exists to answer, and the titles are the honest short answer. The References cutoff has already run by this point, so what the list shows is what goes.
+- No auto-dismiss and no timeout: an unanswered card stays. The paper is readable in the left pane regardless, which is why blocking here is acceptable.
 
 ## extract/columns.js
 - Input: text items with `transform` (pdf.js gives `[a,b,c,d,x,y]`), `width`, `height`, `fontName`.
@@ -73,8 +91,10 @@ export const PROVIDERS = {
     baseUrl: "https://generativelanguage.googleapis.com/v1beta/openai/",
     model: "gemini-3.8-flash",
     keyRef: "gemini",
+    destination: "google",
     strategy: "whole-document",
     limits: { rpd: 10_000, rpm: 1_000, tpm: 2_000_000 },
+    pricing: { inPerM: 0.75, outPerM: 3.75 },
     params: { reasoning_effort: "low" },
     supports: { jsonSchema: true, streaming: true, reasoningOff: false },
   },
@@ -83,6 +103,7 @@ export const PROVIDERS = {
     baseUrl: "https://generativelanguage.googleapis.com/v1beta/openai/",
     model: "gemini-3.5-flash-lite",
     keyRef: "gemini",
+    destination: "google",
     strategy: "per-section",
     limits: { rpd: 150_000, rpm: 4_000, tpm: 4_000_000 },
     supports: { jsonSchema: true, streaming: true, reasoningOff: true },
@@ -92,6 +113,7 @@ export const PROVIDERS = {
     baseUrl: "http://127.0.0.1:11434/v1/",
     model: "gemma4:e4b",
     keyRef: null,
+    destination: "local",
     strategy: "per-section",
     limits: null,
     params: { options: { num_ctx: 32768 } },
@@ -102,44 +124,60 @@ export const PROVIDERS = {
 
 Limits above are the **real Tier 1 (paid) numbers**, confirmed 2026-09-11 — the free-tier figures this spec was drafted with were placeholders and were an order of magnitude out. `tpm` is recorded because it, not `rpd`, is the limit a whole-document request can realistically approach.
 
-The module also exports `DEFAULT_PROVIDER_ID` (`"gemini-prod"` — the user's stated preference) and `FALLBACK_ORDER`, plus `getProvider(id)` which throws on an unknown id so a bad settings value fails by name.
+`destination` names the party the text reaches, and is what consent and automatic fallback are scoped by (CLAUDE.md). `pricing` is per million tokens, and exists only so the confirm card can state a cost; nothing else reads it. The Gemini figures are promotional and double on 2027-01-01 — the constant needs updating by hand then.
+
+`gemini-prod` **keeps `strategy: "whole-document"`**, decided 2026-09-11 after the original reason for it (a 20-requests-per-day cap) turned out never to have existed. It stays because it is cheapest in tokens, gives a TL;DR written from the full text rather than from a digest of its own bullets, and keeps quota and 429 fallback to one clean request per paper; the alignment risk that argued against it is answered by the adapter's title checksum rather than by changing strategy. `per-section` is not the poor relation here — it is what `gemini-dev` and `ollama` use, so that path is built and exercised regardless of what the default does.
+
+The module also exports `DEFAULT_PROVIDER_ID` (`"gemini-prod"` — the user's stated preference) and `FALLBACK_ORDER` (`["gemini-prod", "gemini-dev"]`, Google only: the local model is never an automatic fallback target, per the user's preference), plus `getProvider(id)` which throws on an unknown id so a bad settings value fails by name, and `fallbacksFor(id)` which returns the order filtered to the same `destination`.
 
 ## model/adapter.js
 - `outline(doc, sections, providerId)`:
   - `whole-document` → one request containing every section's text, returns all bullets plus the TL;DR.
   - `per-section` → one request per section, dispatched with concurrency 3, each resolving independently so the pane can fill progressively; then one reduce request for the TL;DR.
-- Wraps every call in the quota check. On `rpd` exhaustion or HTTP 429, moves to the next entry in the user's configured fallback order and reports which provider actually served the result.
+- **Sections with empty text are never sent** — `extract/assemble.js` keeps them deliberately (a parent heading whose first subsection follows immediately), but CLAUDE.md's "2–4 bullets per section" cannot apply to a section with nothing in it. They are excluded from the payload and re-inserted, bullet-less, at their original index before the result is returned. Under `per-section` an empty request would also be a wasted one.
+- **Alignment is verified, not assumed.** `page` and `y` are re-attached from the input section at that index; the model's echoed `title` is compared against the input title and a mismatch — or a returned section count other than the number sent — is treated as a malformed response per CLAUDE.md. The check runs **before** the outline is written to the cache: an unverified outline must never become a cache entry, because cache hits render with no confirmation and no network request and would serve the bad jump targets forever.
+- Wraps every call in the quota check **and the consent check**. On `rpd` exhaustion or HTTP 429, moves to the next same-destination entry in the user's configured fallback order and reports which provider actually served the result; when that runs out it raises `consent-required` for the next destination rather than crossing to it (CLAUDE.md).
+- Under `per-section`, consent is checked once for the run, not per request — the cache key is the same for every section of one document.
 - Returns `{ sections: [{title, page, y, bullets: []}], tldr, providerId, model, usage }`.
 
 ## model/openai-compat.js
 - `POST {baseUrl}chat/completions`, `Authorization: Bearer <key>` when `keyRef` is set.
 - `response_format: { type: "json_schema", json_schema: { name: "outline", strict: true, schema } }`.
-- Streams with `stream: true` and parses SSE incrementally so partial sections can render.
+- Streams with `stream: true` and parses SSE incrementally so partial sections can render. Under `per-section` this is trivial — each response is a small complete object. Under `whole-document`, which is what the default provider uses, progressive fill means scanning the partially accumulated JSON for **complete** objects inside `sections[]` and emitting those; the checksum above still runs over the finished response, so a partially rendered pane is never a cached one.
 - Ollama needs no `Authorization` header, but **does** check the `Origin` header server-side — this is not browser CORS. `OLLAMA_ORIGINS` must include `moz-extension://*`. Detect a refused origin specifically and surface that exact remedy rather than a generic network error.
 - Gemini's OpenAI-compatibility layer is documented as beta and may not carry `thoughtsTokenCount` into OpenAI's usage shape. If thinking-token counts are needed, that one provider may call the native endpoint instead; keep an `useNativeEndpoint` escape hatch in the descriptor rather than reshaping the adapter.
 
 ## model/prompts.js
 - `export const PROMPT_VERSION = 1;` — bump on any prompt text or schema change.
-- JSON schema: `{ sections: [{ title: string, bullets: string[] }], tldr: string }`. Section order must match input order; the adapter re-attaches `page`/`y` by index rather than trusting the model to echo them.
-- Prompt states: extractive only, 2–4 bullets, ≤20 words each, keep reported numbers verbatim, no bullets about the reference list.
+- JSON schema: `{ sections: [{ title: string, bullets: string[] }], tldr: string }`. Section order must match input order. The adapter re-attaches `page`/`y` by index and uses the echoed `title` **only as a checksum** — the echo is never the source of truth for where a bullet points, but it is what makes a drift detectable.
+- Constrain in the schema whatever the schema can carry, since structured output is constrained decoding and anything expressible there is enforced rather than merely asked for: `bullets` as `minItems: 2, maxItems: 4`, and `sections` pinned to exactly the number of sections sent (`minItems` = `maxItems` = N).
+- ⚠️ **Whether those two keywords actually bind is unverified.** OpenAI's `strict` mode rejects `minItems`/`maxItems` as unsupported keywords; Gemini's native schema type accepts them; Gemini's OpenAI-compatibility layer is beta and its keyword coverage is undocumented. Step 7's first real call must establish which — if they are rejected or silently ignored, the counts fall back to prompt instruction plus the adapter's post-hoc check, and the adapter's verification becomes the only real guarantee.
+- The ≤20-word limit and extractiveness cannot be expressed in a schema at all, so they are prompt-side and checked by measurement, not enforced.
+- Prompt states: extractive only, 2–4 bullets, ≤20 words each, keep reported numbers verbatim, no bullets about the reference list, and echo each section's title exactly as given.
 
 ## store/db.js
 IndexedDB `scholar-reader`, version 1:
 - `docs` — key `hash`; `{ hash, title, authors, doi, arxivId, pageCount, urls[], lastOpened, lastPage, scrollTop }`
 - `outlines` — key `hash:providerId:model:strategy:promptVersion`; `{ key, hash, sections, tldr, createdAt, usage }`
+- `consents` — key the same cache key; `{ key, hash, providerId, model, destination, grantedAt }`, plus a non-unique `hash` index so every grant for one document can be revoked together. Written only from the confirm card's accept path.
 - `quota` — key `providerId:pacificDate`; `{ key, count }`
+
+Version 2 adds `consents`; the upgrade path creates the store and nothing else, since an absent grant is correctly read as "ask".
 
 Request `unlimitedStorage` in the manifest.
 
 ## External service setup
-- **Google AI Studio** ✅ — key created by the user and held outside the repo; it is entered in extension settings at step 13. Tier 1 (paid). Real limits recorded in `model/providers.js`.
+- **Google AI Studio** ✅ — key created by the user and held outside the repo; it is entered in extension settings at step 14. Tier 1 (paid). Real limits recorded in `model/providers.js`.
 - **Ollama** ⏸️ — user installs Ollama, pulls `gemma4:e4b`, and starts it with `OLLAMA_ORIGINS="moz-extension://*"`. Nothing is needed back except confirmation that `curl http://127.0.0.1:11434/api/tags` responds.
 - **addons.mozilla.org** ⏸️ (post-v1) — user submits the built XPI for **unlisted** signing and downloads the signed file. Zen enforces Gecko's signature requirement and its `xpinstall.signatures.required` pref cannot be overridden, so unsigned permanent installation is impossible; `about:debugging` temporary loading is the development path and does not survive a restart.
 
 ## Verification per area
 - **Interception** — an arXiv abstract-page PDF link and a publisher DOI link both open in the custom viewer; an opted-out origin does not.
 - **Extraction** — the debug panel lists correct section titles for ten papers from the user's own reading list, including at least three two-column ones. Saved to `fixtures/` as it goes.
-- **Adapter** — outline produced from a fixture with no PDF in the loop; a forced 429 falls through to the next provider.
+- **Adapter** — outline produced from a fixture with no PDF in the loop; a forced 429 falls through to the next same-destination provider, and stops rather than crossing to the local one. A response with a section dropped, added or retitled is rejected as malformed and never cached. Empty-text sections reach no provider.
+- **Schema enforcement** — establish on the first real call whether Gemini's OpenAI-compat layer honours `minItems`/`maxItems`: send an N-section payload and confirm N sections come back, and that no section carries fewer than 2 or more than 4 bullets. Record the answer in PROGRESS.md, because everything the schema does not enforce has to be caught by the adapter instead.
+- **Output quality under whole-document** — measured over the fixtures, not eyeballed on one: bullets outside 2–4, bullets over 20 words **as a function of position in the response** (the long-tail drift that a schema cannot prevent), and whether Results sections keep their reported numbers. `gpt3.json` is the stress case at 32 sections and ~51k est. tokens.
+- **Send confirmation** — opening a fresh paper issues **zero** provider requests until the button is clicked (devtools network panel, and the quota counter unchanged); reopening it after approval does not re-ask; changing the provider or bumping `PROMPT_VERSION` does re-ask; a scanned PDF shows no card at all.
 - **Cache** — reopening a document issues zero network requests (verify in devtools network panel).
 - **Quota** — counter increments per request and resets when the Pacific date string changes (test by stubbing the date function).
 - **Secrets** — `npm run check:secrets` passes on a build made after entering a real key in settings.
