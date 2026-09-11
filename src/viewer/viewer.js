@@ -2,6 +2,9 @@
 import { createPdfView, fetchPdf } from "./pdfview.js";
 import { initTheme } from "./theme.js";
 import { recordOpen, readingPosition, saveReadingPosition, sha256Hex } from "../store/docs.js";
+import { charsPerPage, extractPages } from "../extract/textlayer.js";
+import { layoutDocument } from "../extract/columns.js";
+import { createDebugPane } from "./debug-pane.js";
 
 const SAVE_DEBOUNCE_MS = 600;
 
@@ -12,6 +15,7 @@ const els = {
   statusTitle: document.querySelector("#pdf-status .status-title"),
   statusDetail: document.querySelector("#pdf-status .status-detail"),
   note: document.getElementById("pane-note"),
+  debug: document.getElementById("debug-pane"),
   title: document.getElementById("doc-title"),
   page: document.getElementById("page-indicator"),
   zoom: document.getElementById("zoom-level"),
@@ -93,6 +97,23 @@ function trackReadingPosition(view, hash, position) {
   });
 }
 
+// Extraction is its own failure domain too: a paper that defeats the text layer
+// must still render and still scroll.
+async function runExtraction(view, pdfDoc) {
+  const pane = createDebugPane({
+    root: els.debug,
+    onJump: (target) => view.scrollToSection(target),
+  });
+  try {
+    const pages = await extractPages(pdfDoc, { onPage: (_, done, total) => pane.progress(done, total) });
+    const sideways = pages.reduce((n, page) => n + page.droppedSideways, 0);
+    pane.render(layoutDocument(pages), charsPerPage(pages), sideways);
+  } catch (err) {
+    console.error("[scholar-reader] extraction failed", err);
+    pane.fail(`The text layer could not be read: ${err.message}`);
+  }
+}
+
 async function main() {
   await initTheme(els.theme);
 
@@ -133,6 +154,10 @@ async function main() {
     showStatus("This PDF could not be opened", err.message, true);
     return;
   }
+
+  runExtraction(view, doc).catch((err) => {
+    console.error("[scholar-reader] extraction pane failed", err);
+  });
 
   // Identity and history are a separate failure domain from rendering: a broken
   // IndexedDB must not cost the reader the paper.
