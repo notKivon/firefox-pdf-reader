@@ -1,4 +1,7 @@
 // Background entry point. Wires the PDF interceptor and the message router.
-// Step 1: neither exists yet, so this only proves the event page loads.
+// The router arrives with the model adapter in step 7.
+import { registerInterceptor } from "./intercept.js";
+
+registerInterceptor();
 
 console.log("[scholar-reader] background loaded");

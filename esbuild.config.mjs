@@ -7,9 +7,26 @@ const out = resolve(root, "dist");
 
 // Files copied verbatim into dist/, as [source, destination-relative-to-dist].
 // Extension pages are referenced flat from the manifest, so they land at the root.
+const pdfjs = (path) => `node_modules/pdfjs-dist/${path}`;
+
 const STATIC = [
   ["manifest.json", "manifest.json"],
   ["src/viewer/viewer.html", "viewer.html"],
+  ["src/viewer/theme.css", "theme.css"],
+  // pdf.js ships its viewer CSS and the images that CSS references side by
+  // side; the relative url(images/...) only resolves if both land flat.
+  [pdfjs("web/pdf_viewer.css"), "pdf_viewer.css"],
+  [pdfjs("web/images"), "images"],
+  // Copied, not bundled: pdf.js spawns it with `new Worker(src, {type:"module"})`.
+  // Its sourcemap comes along or devtools 404s on every worker load.
+  [pdfjs("build/pdf.worker.mjs"), "pdf.worker.mjs"],
+  [pdfjs("build/pdf.worker.mjs.map"), "pdf.worker.mjs.map"],
+  // Data pdf.js fetches at runtime. Bundled so the viewer works offline and
+  // never reaches a CDN.
+  [pdfjs("cmaps"), "cmaps"],
+  [pdfjs("standard_fonts"), "standard_fonts"],
+  [pdfjs("wasm"), "wasm"],
+  [pdfjs("iccs"), "iccs"],
 ];
 
 async function copyStatic() {

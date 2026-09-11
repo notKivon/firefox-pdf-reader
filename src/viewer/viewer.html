@@ -4,9 +4,37 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Scholar Reader</title>
+    <link rel="stylesheet" href="pdf_viewer.css" />
+    <link rel="stylesheet" href="theme.css" />
   </head>
   <body>
-    <p id="status">Loading…</p>
+    <header id="toolbar">
+      <span id="doc-title">Scholar Reader</span>
+      <div id="toolbar-controls">
+        <button id="zoom-out" title="Zoom out">&minus;</button>
+        <span id="zoom-level">&ndash;</span>
+        <button id="zoom-in" title="Zoom in">+</button>
+        <span id="page-indicator">&ndash;&thinsp;/&thinsp;&ndash;</span>
+        <button id="theme-toggle" title="Toggle theme">&#9728;</button>
+      </div>
+    </header>
+
+    <div id="panes">
+      <main id="pdf-pane">
+        <div id="viewerContainer"><div id="viewer" class="pdfViewer"></div></div>
+        <div id="pdf-status">
+          <span class="status-title">Loading…</span>
+          <span class="status-detail"></span>
+        </div>
+      </main>
+      <aside id="outline-pane">
+        <p class="pane-placeholder">
+          The section outline appears here once extraction and the model adapter land
+          (steps 5&ndash;8).
+        </p>
+      </aside>
+    </div>
+
     <script src="viewer.js"></script>
   </body>
 </html>

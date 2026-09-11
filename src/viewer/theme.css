@@ -1,0 +1,170 @@
+/* Dark is the default and lives on bare :root. [data-theme="light"] overrides
+   it — never the other way around. */
+:root {
+  color-scheme: dark;
+
+  --bg: #16181d;
+  --bg-raised: #1d2026;
+  --bg-sunken: #0f1115;
+  --border: #2b2f38;
+  --text: #e6e8ee;
+  --text-dim: #98a0b0;
+  --accent: #7aa2f7;
+  --danger: #f7768e;
+  --shadow: rgba(0, 0, 0, 0.45);
+
+  --toolbar-height: 40px;
+  --outline-width: 360px;
+}
+
+:root[data-theme="light"] {
+  color-scheme: light;
+
+  --bg: #f4f5f7;
+  --bg-raised: #ffffff;
+  --bg-sunken: #e7e9ee;
+  --border: #d3d7e0;
+  --text: #1b1e24;
+  --text-dim: #5c6472;
+  --accent: #2f5fd0;
+  --danger: #c7304a;
+  --shadow: rgba(16, 20, 30, 0.16);
+}
+
+html,
+body {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  display: flex;
+  flex-direction: column;
+  background: var(--bg);
+  color: var(--text);
+  font: 13px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif;
+  overflow: hidden;
+}
+
+#toolbar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  height: var(--toolbar-height);
+  flex: 0 0 var(--toolbar-height);
+  padding: 0 12px;
+  background: var(--bg-raised);
+  border-bottom: 1px solid var(--border);
+}
+
+#doc-title {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 600;
+}
+
+#toolbar-controls {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: 0 0 auto;
+}
+
+#toolbar button {
+  min-width: 28px;
+  height: 26px;
+  padding: 0 7px;
+  background: var(--bg-sunken);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  font: inherit;
+  cursor: pointer;
+}
+
+#toolbar button:hover {
+  border-color: var(--accent);
+}
+
+#zoom-level,
+#page-indicator {
+  color: var(--text-dim);
+  font-variant-numeric: tabular-nums;
+  min-width: 44px;
+  text-align: center;
+}
+
+#panes {
+  display: flex;
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+#pdf-pane {
+  position: relative;
+  flex: 1 1 auto;
+  min-width: 0;
+  background: var(--bg-sunken);
+}
+
+/* pdf.js requires an absolutely positioned, scrollable container. */
+#viewerContainer {
+  position: absolute;
+  inset: 0;
+  overflow: auto;
+}
+
+#pdf-status {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 24px;
+  text-align: center;
+  background: var(--bg-sunken);
+  color: var(--text-dim);
+}
+
+#pdf-status[hidden] {
+  display: none;
+}
+
+#pdf-status .status-title {
+  color: var(--text);
+  font-size: 15px;
+  font-weight: 600;
+}
+
+#pdf-status.is-error .status-title {
+  color: var(--danger);
+}
+
+#pdf-status .status-detail {
+  max-width: 46ch;
+  word-break: break-word;
+}
+
+#outline-pane {
+  flex: 0 0 var(--outline-width);
+  overflow-y: auto;
+  padding: 16px;
+  background: var(--bg);
+  border-left: 1px solid var(--border);
+}
+
+.pane-placeholder {
+  margin: 0;
+  color: var(--text-dim);
+}
+
+/* pdf.js draws its own page shadow; reuse the theme's. */
+.pdfViewer .page {
+  --page-box-shadow: 0 2px 8px var(--shadow);
+  border: none;
+}
