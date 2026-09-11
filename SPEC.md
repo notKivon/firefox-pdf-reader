@@ -69,12 +69,12 @@ Descriptors only — no keys. Exact initial content:
 ```js
 export const PROVIDERS = {
   "gemini-prod": {
-    label: "Gemini 3.8 Flash (free tier)",
+    label: "Gemini 3.8 Flash",
     baseUrl: "https://generativelanguage.googleapis.com/v1beta/openai/",
     model: "gemini-3.8-flash",
     keyRef: "gemini",
     strategy: "whole-document",
-    limits: { rpd: 20, rpm: 10 },
+    limits: { rpd: 10_000, rpm: 1_000, tpm: 2_000_000 },
     params: { reasoning_effort: "low" },
     supports: { jsonSchema: true, streaming: true, reasoningOff: false },
   },
@@ -84,7 +84,7 @@ export const PROVIDERS = {
     model: "gemini-3.5-flash-lite",
     keyRef: "gemini",
     strategy: "per-section",
-    limits: { rpd: 500, rpm: 15 },
+    limits: { rpd: 150_000, rpm: 4_000, tpm: 4_000_000 },
     supports: { jsonSchema: true, streaming: true, reasoningOff: true },
   },
   "ollama": {
@@ -100,7 +100,9 @@ export const PROVIDERS = {
 };
 ```
 
-`limits.rpd` for `gemini-prod` is a **placeholder pending step 3**, where the user reads the real number off their AI Studio rate-limit page. Update it there rather than assuming.
+Limits above are the **real Tier 1 (paid) numbers**, confirmed 2026-09-11 — the free-tier figures this spec was drafted with were placeholders and were an order of magnitude out. `tpm` is recorded because it, not `rpd`, is the limit a whole-document request can realistically approach.
+
+The module also exports `DEFAULT_PROVIDER_ID` (`"gemini-prod"` — the user's stated preference) and `FALLBACK_ORDER`, plus `getProvider(id)` which throws on an unknown id so a bad settings value fails by name.
 
 ## model/adapter.js
 - `outline(doc, sections, providerId)`:
@@ -130,7 +132,7 @@ IndexedDB `scholar-reader`, version 1:
 Request `unlimitedStorage` in the manifest.
 
 ## External service setup
-- **Google AI Studio** ⏸️ — user creates an API key and reads their actual rate limits from the AI Studio rate-limit page. Values needed back: the key (entered in extension settings, never pasted into the repo) and the real RPD/RPM for `gemini-3.8-flash` and `gemini-3.5-flash-lite`.
+- **Google AI Studio** ✅ — key created by the user and held outside the repo; it is entered in extension settings at step 13. Tier 1 (paid). Real limits recorded in `model/providers.js`.
 - **Ollama** ⏸️ — user installs Ollama, pulls `gemma4:e4b`, and starts it with `OLLAMA_ORIGINS="moz-extension://*"`. Nothing is needed back except confirmation that `curl http://127.0.0.1:11434/api/tags` responds.
 - **addons.mozilla.org** ⏸️ (post-v1) — user submits the built XPI for **unlisted** signing and downloads the signed file. Zen enforces Gecko's signature requirement and its `xpinstall.signatures.required` pref cannot be overridden, so unsigned permanent installation is impossible; `about:debugging` temporary loading is the development path and does not survive a restart.
 
