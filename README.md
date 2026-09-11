@@ -9,6 +9,17 @@ A Firefox/Zen extension that replaces the browser's PDF viewer with a two-pane a
 
 This README holds only the things that live nowhere else: the session prompts and the load procedure.
 
+## Repository
+
+<https://github.com/notKivon/firefox-pdf-reader> — **public**, `main` is the only
+branch, and the local clone tracks `origin/main`.
+
+Public is deliberate. Nothing here is secret: provider base URLs, model IDs and
+rate limits are all public constants, and the one real secret — the Gemini API
+key — is entered in the extension's settings page and never touches the repo.
+It does mean history is permanent and world-readable, so the secrets policy
+below is a hard rule rather than tidiness.
+
 ---
 
 ## Session prompts
@@ -77,3 +88,13 @@ These exist from step 1 onward.
 No API key ever goes in this repo. Keys are entered in the extension's own
 settings page and live in `browser.storage.local`. See the secrets policy in
 `CLAUDE.md`.
+
+`.gitignore` covers the paths a key could plausibly reach: `dist/`, `.env`,
+`*.key`, `*.xpi`. `npm run check:secrets` greps the **built bundle**, which is
+the case that matters before packaging — but note it does not scan tracked
+sources, so a key pasted into a source file or a fixture would slip past it.
+On a public repo that is unrecoverable by deletion: a pushed key must be
+treated as burned and rotated at aistudio.google.com, not just removed.
+
+Worth tightening at step 13, when `settings.js` starts handling the key for
+real and a stray `console.log` becomes the likely slip.
