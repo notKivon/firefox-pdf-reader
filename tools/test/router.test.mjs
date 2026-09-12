@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs";
 
 // The router reads storage.local for the API key; nothing else of the browser
 // surface is touched by `plan`.
-const store = { apiKeys: { gemini: "AIza-not-a-real-key" } };
+const store = { apiKeys: { gemini: "test-key-not-a-real-one" } };
 globalThis.browser = {
   storage: { local: { get: async (k) => ({ [k]: store[k] }) } },
   runtime: { onMessage: { addListener() {} } },
