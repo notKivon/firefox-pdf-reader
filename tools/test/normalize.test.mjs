@@ -3,7 +3,7 @@
 // damaging the reported numbers CLAUDE.md requires results bullets to carry.
 import assert from "node:assert/strict";
 
-const { normalizeText } = await import("../../src/extract/normalize.js");
+const { normalizeText, UNRENDERABLE } = await import("../../src/extract/normalize.js");
 
 let passed = 0;
 const results = [];
@@ -51,6 +51,25 @@ test("repeated calls give the same answer", () => {
   assert.equal(normalizeText(input), "a and b");
   assert.equal(normalizeText(input), "a and b");
   assert.equal(normalizeText(normalizeText(input)), "a and b", "and it is idempotent");
+});
+
+test("stacked bracket pieces become the bracket they are part of", () => {
+  // A square bracket taller than a line arrives as two private-use fragments,
+  // one per line. Confirmed in the fixtures: U+F8EE then U+F8F0.
+  assert.equal(normalizeText("\uF8EE x"), "[ x");
+  assert.equal(normalizeText("\uF8F0 y"), "[ y");
+  assert.equal(normalizeText("z \uF8FB"), "z ]");
+  assert.equal(normalizeText("\uF8EB a \uF8F8"), "( a )");
+  assert.equal(normalizeText("\uF8F1 b \uF8FE"), "{ b }");
+});
+
+test("private use characters that are not delimiters are left alone", () => {
+  // They mean pdf.js could not map a font's glyphs at all. Substituting a guess
+  // would put text in the pane that the paper does not contain; the extraction
+  // panel names them instead.
+  assert.equal(normalizeText("\uE042"), "\uE042");
+  assert.equal(normalizeText("\uF8E5"), "\uF8E5", "the radical extender has no honest equivalent");
+  assert.match(normalizeText("\uE042"), UNRENDERABLE, "and it is reported");
 });
 
 console.log(results.join("\n"));

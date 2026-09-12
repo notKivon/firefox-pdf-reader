@@ -76,6 +76,37 @@ test("a run only slightly smaller is a size change, not a script", () => {
   );
 });
 
+test("scripts are marked with the level the paper set them at", () => {
+  const [line] = groupLines([
+    it("x", 50, 100, 6, BODY),
+    it("2", 56, 96.7, 3.5, 7),
+    it("y", 60, 100, 6, BODY),
+    it("1", 66, 102.2, 3.5, 7),
+  ], TOL, {});
+  assert.deepEqual(
+    line.runs.map((r) => [r.str.trim(), r.script]),
+    [["x", null], ["2", "sup"], ["y", null], ["1", "sub"]],
+  );
+  assert.equal(line.str, "x2y1", "the flat string is unchanged, so nothing downstream shifts");
+});
+
+test("ordinary body text is never marked as a script", () => {
+  const [line] = groupLines([it("plain text here", 50, 100, 60, BODY)], TOL, {});
+  assert.deepEqual([...new Set(line.runs.map((r) => r.script))], [null]);
+});
+
+test("a line's baseline and face come from its body text, not a leading script", () => {
+  // A script's font differs from the body face, and "not the body face" is half
+  // of step 6's heading test — so a line opening with one could read as a
+  // heading purely because of where its first run sat.
+  const [line] = groupLines([
+    { ...it("2", 50, 96.7, 3.5, 7), fontName: "script-font", pdfY: 703.3 },
+    { ...it("x is the value", 54, 100, 60, BODY), fontName: "body-font", pdfY: 700 },
+  ], TOL, {});
+  assert.equal(line.fontName, "body-font");
+  assert.equal(line.pdfY, 700);
+});
+
 console.log(results.join("\n"));
 console.log(`\n${passed}/${results.length} passed`);
 process.exit(passed === results.length ? 0 : 1);

@@ -120,3 +120,19 @@
   flex: 0 0 22px;
 }
 
+
+/* Runs the paper set above or below the baseline, shown where it put them.
+   `line-height: 0` keeps them from stretching the row they sit in. */
+.debug-text sup,
+.debug-text sub {
+  font-size: 0.75em;
+  line-height: 0;
+}
+
+/* Wide enough for a U+XXXX codepoint, unlike the column badge. */
+.debug-cp {
+  flex: 0 0 52px;
+  color: var(--text-dim);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}

@@ -1,6 +1,7 @@
 // Step 5/6 debug panel: shows the detected column layout and the reading order
 // the extractor produced, so a bad layout is diagnosable rather than mysterious.
 import { el } from "./el.js";
+import { UNRENDERABLE } from "../extract/normalize.js";
 
 const SCANNED_CHARS_PER_PAGE = 200;
 
@@ -32,9 +33,45 @@ export function createDebugPane({ root, onJump }) {
     const label = line.column < 0 ? "▭" : line.column === 0 ? "L" : "R";
     const badge = el("span", "debug-col", label);
     badge.title = line.column < 0 ? "spans both columns" : `column ${line.column + 1}`;
-    row.append(badge, el("span", "debug-text", line.str));
+    row.append(badge, renderText(line));
     row.addEventListener("click", () => onJump?.({ page: line.page, y: line.pdfY }));
     return row;
+  }
+
+  // Built from the line's runs rather than its flat string, so a superscript
+  // sits where the paper put it instead of dropping to the baseline.
+  function renderText(line) {
+    const box = el("span", "debug-text");
+    if (!line.runs?.length) {
+      box.textContent = line.str;
+      return box;
+    }
+    for (const run of line.runs) {
+      box.append(el(run.script === "sup" ? "sup" : run.script === "sub" ? "sub" : "span", null, run.str));
+    }
+    return box;
+  }
+
+  // Characters no font can draw, so they reach the reader as boxes. They mean a
+  // PDF font whose glyphs pdf.js could not map to Unicode at all. Named rather
+  // than guessed at: the right substitution depends on which ones they are, and
+  // inventing one would put text in the pane the paper does not contain.
+  function renderUnrenderable(list) {
+    const box = el("details", "debug-page");
+    box.append(el("summary", null, `Unrenderable characters — ${list.length} distinct`));
+    const rows = el("div", "debug-lines");
+    for (const [ch, n] of list) {
+      const row = el("div", "debug-line");
+      const cp = ch.codePointAt(0).toString(16).toUpperCase().padStart(4, "0");
+      row.append(
+        el("span", "debug-cp", `U+${cp}`),
+        el("span", "debug-text", "no font draws this; pdf.js could not map the glyph"),
+        el("span", "debug-size", String(n)),
+      );
+      rows.append(row);
+    }
+    box.append(rows);
+    return box;
   }
 
   function renderPage(layout) {
@@ -97,6 +134,17 @@ export function createDebugPane({ root, onJump }) {
     // Sideways runs are stamps and rotated headers; a surprising count here is
     // the first sign that a page was misread.
     if (sideways) stat("Sideways runs dropped", sideways);
+
+    const counts = new Map();
+    for (const page of laid) {
+      for (const line of page.lines) {
+        for (const ch of line.str.match(UNRENDERABLE) ?? []) counts.set(ch, (counts.get(ch) ?? 0) + 1);
+      }
+    }
+    if (counts.size) {
+      stat("Unrenderable characters", [...counts.values()].reduce((a, b) => a + b, 0));
+      root.insertBefore(renderUnrenderable([...counts].sort((a, b) => b[1] - a[1])), sections);
+    }
 
     if (result?.scanned || charsPerPage < SCANNED_CHARS_PER_PAGE) {
       const warn = el(

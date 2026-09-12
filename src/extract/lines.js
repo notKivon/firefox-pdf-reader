@@ -9,42 +9,69 @@ const SCRIPT_HEIGHT_RATIO = 0.85;
 // real line spacing, so two body lines can never merge.
 const SCRIPT_REACH = 1.6;
 
+// How far off the baseline a small run has to sit before it is a script rather
+// than ordinary text that happens to be set smaller.
+const SCRIPT_MIN_OFFSET = 0.12; // × the line's body height
+
 // pdf.js emits a run per style change, and whether a run already carries its
 // trailing space is inconsistent. Reconstruct spacing from geometry instead.
 function joinItems(items) {
-  let str = "";
+  const runs = [];
   let prevRight = null;
   for (const item of items) {
     const needsSpace =
       prevRight !== null &&
       item.x - prevRight > SPACE_GAP * (item.height || 1) &&
-      !/\s$/.test(str) &&
+      !/\s$/.test(runs.at(-1)?.str ?? "") &&
       !/^\s/.test(item.str);
-    str += (needsSpace ? " " : "") + item.str;
+    runs.push({ str: (needsSpace ? " " : "") + item.str, script: item.script });
     prevRight = item.x + item.width;
   }
-  return str.replace(/\s+/g, " ").trim();
+  return runs;
+}
+
+// Which runs are super/subscripts, decided against the *finished* line — its
+// baseline and the height of its body text — rather than against whatever run
+// happened to open the group. Small and off the baseline is the whole test;
+// screen y increases downward, so a negative offset is a superscript.
+function classify(items, baseline, bodyHeight) {
+  return items.map((item) => {
+    const dy = item.y - baseline;
+    const small = bodyHeight > 0 && item.height < bodyHeight * SCRIPT_HEIGHT_RATIO;
+    const off = bodyHeight > 0 && Math.abs(dy) >= bodyHeight * SCRIPT_MIN_OFFSET;
+    return { ...item, script: small && off ? (dy < 0 ? "sup" : "sub") : null };
+  });
 }
 
 function finishLine(group, column, pageNumber) {
-  const items = group.items.sort((p, q) => p.x - q.x);
+  const ordered = [...group.items].sort((p, q) => p.x - q.x);
   let height = 0;
   let right = -Infinity;
-  for (const item of items) {
+  for (const item of ordered) {
     if (item.height > height) height = item.height;
     const edge = item.x + item.width;
     if (edge > right) right = edge;
   }
+  const items = classify(ordered, group.y, height);
+  const runs = joinItems(items);
+  // A line's baseline and its face both belong to its body text. Taking them
+  // from the leftmost run means a line that opens with a superscript reports a
+  // raised baseline and the script's font — and a font that differs from the
+  // body face is half of step 6's heading test.
+  const anchor = items.find((item) => !item.script) ?? items[0];
   return {
-    str: joinItems(items),
+    str: runs.map((run) => run.str).join("").replace(/\s+/g, " ").trim(),
+    // Per-run text with its script level, for anything rendering the line
+    // faithfully rather than as a flat string.
+    runs,
     x: items[0].x,
     right,
     y: group.y,
     height,
     // The baseline in PDF user space — what scrollPageIntoView's XYZ wants.
-    pdfY: items[0].pdfY,
-    fontName: items[0].fontName,
-    fontFamily: items[0].fontFamily ?? "",
+    pdfY: anchor.pdfY,
+    fontName: anchor.fontName,
+    fontFamily: anchor.fontFamily ?? "",
     column,
     page: pageNumber,
     items,
