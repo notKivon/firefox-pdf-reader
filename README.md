@@ -31,7 +31,7 @@ Resume the build. Read CLAUDE.md, SPEC.md, and PROGRESS.md. Reconcile
 PROGRESS.md against git log and the working tree — trust git over
 PROGRESS.md and fix PROGRESS.md if they disagree. Run npm run build to
 confirm the tree is healthy. Then continue from the current step in
-PROGRESS.md, one step at a time, committing only tested working states.
+PROGRESS.md, one step at a time, committing only tested working states. After finishing a step, await further input. Do not move onto the next step without explicit user permission.
 ```
 
 ### After a session was cut off mid-step
