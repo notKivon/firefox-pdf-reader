@@ -43,13 +43,16 @@ body {
   background: var(--bg);
   color: var(--text);
   /* Symbol faces behind the UI ones, asked only for a glyph the UI faces lack
-     and ignored where they are not installed. The SF faces cover no math
-     operators at all: ⊙ (U+2299) and ∝ (U+221D) are both absent, and STIX Two
-     Math has the first but not the second — ∝ lives in STIXVariants — so the
-     order matters. Apple Symbols has both and ships with macOS, and is first
-     because it blends with SF; Arial Unicode MS is the backstop. */
+     and ignored where they are not installed.
+
+     The SF faces carry no math operators — ⊙ (U+2299) and ∝ (U+221D) are both
+     absent — so without these the OS picks a last-resort face on its own and
+     the result is legible but wrong: undersized and sitting off the baseline.
+     STIX Two Math leads because it is a real math face (4,605 glyphs, all of a
+     15-symbol sample) and draws operators at text size and on the text
+     baseline. Apple Symbols and Arial Unicode MS follow as backstops. */
   font:
-    13px/1.5 system-ui, -apple-system, "Segoe UI", "Apple Symbols", "STIX Two Math", "Arial Unicode MS",
+    13px/1.5 system-ui, -apple-system, "Segoe UI", "STIX Two Math", "Apple Symbols", "Arial Unicode MS",
     sans-serif;
   overflow: hidden;
 }
