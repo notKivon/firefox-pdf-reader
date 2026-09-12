@@ -10,6 +10,9 @@ GlobalWorkerOptions.workerSrc = asset("pdf.worker.mjs");
 
 const ZOOM_STEPS = [0.5, 0.67, 0.8, 0.9, 1, 1.1, 1.25, 1.5, 1.75, 2, 2.5, 3];
 
+// Air above a heading a jump lands on, in PDF points (~0.4in at 100%).
+const SCROLL_TOP_MARGIN = 30;
+
 export async function fetchPdf(url) {
   const host = new URL(url).host;
   let response;
@@ -106,12 +109,19 @@ export function createPdfView({ container, viewerEl, onPageChange, onScaleChange
 
   // Bullets carry {page, y} in PDF user space; XYZ with a null left keeps the
   // current horizontal offset and only scrolls vertically.
+  //
+  // The heading is placed a little below the top rather than flush against it:
+  // arriving with the heading jammed into the edge reads as a cut-off page. In
+  // PDF points, so the gap keeps its proportion to the text as the zoom changes;
+  // +y is up, so leaving air above the heading means scrolling to a larger y.
+  // Near the top of a page that overshoots into the one before, which is what
+  // `allowNegativeOffset` is for and is the right thing to show.
   function scrollToSection({ page, y }) {
     if (!pdfDocument) return;
     const pageNumber = Math.min(Math.max(page ?? 1, 1), pdfViewer.pagesCount);
     pdfViewer.scrollPageIntoView({
       pageNumber,
-      destArray: [null, { name: "XYZ" }, null, y ?? null, null],
+      destArray: [null, { name: "XYZ" }, null, y === undefined || y === null ? null : y + SCROLL_TOP_MARGIN, null],
       allowNegativeOffset: true,
     });
     // Landing somewhere down a dense page is otherwise indistinguishable from
