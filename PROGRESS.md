@@ -2,6 +2,7 @@
 
 **Current step:** 10 — Cache, quota accounting and 429 fallback
 **Next step:** 11 — ⏸️ Ollama and Gemma 4 E4B (needs the user)
+**Open:** math symbols still render wrong on the user's paper — parked, see Open issues.
 **Last verified healthy:** 2026-09-12 — `npm run build` emits `dist/`, `npm test` 71/71, `npm run check:secrets` clean, `web-ext lint` 0 errors (5 warnings, all pre-existing: 4 in bundled pdf.js, 1 on the manifest's Android min version). Step 9 verified live in Zen: bullets and headings jump to the right place and the pane tracks scrolling. Step 8 verified live in Zen: a fresh paper shows the card and issues zero requests to `generativelanguage.googleapis.com` until the button is pressed, an approved paper does not re-ask on reopen, and the local model is reachable only by pressing its own button and then confirming its own card. Step 7 verified against stubs and then against both live Gemini providers: 10/10 sections aligned on each, zero malformed responses. Steps 5 and 6 verified in Node against eleven real papers plus two synthetic ones: column verdict correct on all eleven, section titles correct with no junk entries, References cutoff fires on every path, and the scanned and chunk fallbacks both behave.
 
 ## Running the live probe
@@ -14,6 +15,28 @@ npm run probe -- --fixture bert --provider gemini-prod   # whole-document, ~1c
 ```
 
 `tools/live-probe.mjs` is the only thing that reads that key path; it never prints it. The extension itself takes its key from settings into `storage.local` at step 14.
+
+## Open issues
+
+### ⚠️ Math symbols still render wrong in the pane — UNRESOLVED, parked 2026-09-12
+
+The user reports `⊙` and `∝` (and earlier `𝜈`, `𝑎`, `𝑏`) still displaying wrongly on their own paper after three rounds of fixes. **Parked at their request; they will pick it up later.** The fixes made along the way are real improvements and stay, but none of them resolved the reported symptom.
+
+**Ruled out, with the method — do not re-derive these:**
+- *Not an unmapped glyph.* `node tools/probe-glyphs.mjs <pdf>` over three real astro-ph papers: `⊙` arrives as **U+2299**, the correct codepoint, 19/5/25 occurrences, zero private-use characters.
+- *Not font coverage.* A render test screenshotted in headless Chrome shows **no boxes in any stack**, including bare `system-ui`; macOS supplies a last-resort face unaided. `fontTools` over all 583 installed faces confirms Apple Symbols, STIX Two Math and Arial Unicode MS each cover U+2299 and U+221D.
+- *Not the flattening.* `extract/normalize.js` touches neither character — they are operators, not restyled letters, and are deliberately left alone.
+
+**Shipped along the way (all verified, all kept):** math-alphanumeric flattening; Adobe private-use bracket pieces mapped to real delimiters; subscripts no longer stranded onto lines of their own; scripts rendered at their levels in the extraction panel; STIX Two Math leading the symbol fallbacks (measurably better glyphs — operators at text size on the text baseline rather than undersized and low).
+
+**The gap, and it is the whole problem: every piece of evidence above comes from substitute papers, never the user's.** Two things were never established, and both change what the fix is:
+1. **Which pane is wrong.** Assumed throughout to be the outline/extraction panel. Never confirmed. If it is the **PDF pane**, every CSS change above was aimed at the wrong target — that pane draws glyphs from the PDF's own embedded font programs onto canvas, and the suspects are `pdfview.js`'s `standardFontDataUrl`/`cMapUrl` wiring and pdf.js font loading, with nothing to do with the page's font stack.
+2. **What "wrong" looks like.** An empty box, a box with hex digits, the wrong glyph, a correct glyph rendered badly, and a glyph in the wrong place are five different faults with five different causes. Each round of guessing here cost a full cycle.
+
+**Next session, before changing any code — in this order:**
+1. A screenshot of the failure, and which pane it is in.
+2. `node tools/probe-glyphs.mjs <the user's own paper>` — one command, gives the raw codepoints pdf.js produced.
+3. The extraction panel's **Unrenderable characters** block for that paper (added 2026-09-12; lists each codepoint and count, and is empty when there is nothing unmappable).
 
 ## Checklist
 
