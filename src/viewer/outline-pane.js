@@ -1,68 +1,55 @@
-// The right-hand pane. Step 8 gives it the states around the send: the confirm
-// card, the progress line, and the error paths. Step 9 replaces `showReady` with
-// the real section-and-bullet rendering and the click-to-jump wiring.
+// The right-hand pane and the states it moves through: the confirm card, the
+// progressive fill, the finished outline, and the error paths.
 //
-// The order here is the whole point of the step: `plan` first — which makes no
-// network request — then the card, then the grant, and only then the send.
+// The order of the send is the whole point of the first three: `plan` first —
+// which makes no network request — then the card, then the grant, and only then
+// the send. Rendering the outline itself belongs to `outline-list.js`.
 import { confirmCard } from "./confirm-card.js";
+import { el } from "./el.js";
+import { errorBox } from "./pane-error.js";
+import { outlineList } from "./outline-list.js";
 import { grantConsent } from "../store/consent.js";
 
-function el(tag, className, text) {
-  const node = document.createElement(tag);
-  if (className) node.className = className;
-  if (text !== undefined) node.textContent = text;
-  return node;
-}
+/**
+ * @param {object} args
+ * @param {HTMLElement} args.root
+ * @param {(target: {page, y}) => void} [args.onJump] scrolls the paper
+ * @param {(targets: {page, y}[]) => void} [args.onSections] hands the scroll-spy
+ *   the jump targets currently on screen — an empty list whenever there are none
+ */
+export function createOutlinePane({ root, onJump, onSections }) {
+  let current = null; // {hash, sections, meta, providerId, label}
+  let list = null; // the rendered outline, while one is on screen
 
-export function createOutlinePane({ root }) {
-  let current = null; // {hash, sections, meta, providerId}
-
-  const show = (...nodes) => root.replaceChildren(...nodes);
+  // Every state change drops the outline, so the spy is told before anything can
+  // ask it to highlight a section that is no longer rendered.
+  const show = (...nodes) => {
+    list = null;
+    onSections?.([]);
+    root.replaceChildren(...nodes);
+  };
 
   function showMessage(text, className = "pane-placeholder") {
     show(el("p", className, text));
   }
 
-  // CLAUDE.md: a failed model call must never leave the pane in a silent
-  // spinner, so every failure lands here, in words, with a way forward.
-  //
-  // The way forward includes the other destinations. The card carries them too,
-  // but the card is only ever shown once per cache key — after the grant it
-  // never returns, so without this an error would strand the reader on the one
-  // provider that just failed. It is also what CLAUDE.md requires of an
-  // exhausted chain: state the problem and *offer* the other destination, as a
-  // choice, never as an automatic fallback.
+  // Every failure state, including the ones the reader can be stranded in: see
+  // pane-error.js for why the alternatives travel with them.
   function showError(text, { retry, plan } = {}) {
-    const box = el("div", "outline-error");
-    box.append(el("p", "pane-error", text));
-    if (retry) {
-      const button = el("button", "confirm-go", "Try again");
-      button.type = "button";
-      button.addEventListener("click", retry);
-      box.append(button);
-    }
-    if (plan?.alternatives?.length) {
-      const alt = el("div", "confirm-alt");
-      alt.append(el("span", "confirm-alt-label", "Or send it somewhere else:"));
-      for (const other of plan.alternatives) {
-        const button = el("button", "confirm-alt-go", other.label);
-        button.type = "button";
-        button.addEventListener("click", () => replan(other.id).catch(reportFailure));
-        alt.append(button);
-      }
-      box.append(alt);
-    }
-    show(box);
+    show(errorBox(text, { retry, plan, onPickProvider: (id) => replan(id).catch(reportFailure) }));
   }
 
+  // The finished outline. It names `result.model` rather than the provider that
+  // was asked: fallback may have moved the run, and the reader should see who
+  // actually answered.
   function showReady(result) {
-    const bullets = result.sections.reduce((n, section) => n + section.bullets.length, 0);
+    const rendered = outlineList(result, { onJump });
     const box = el("div", "outline-ready");
-    if (result.tldr) box.append(el("p", "outline-tldr", result.tldr));
-    box.append(
-      el("p", "pane-placeholder", `${result.sections.length} sections, ${bullets} bullets from ${result.model}.`),
-    );
+    box.append(rendered.node);
+    if (result.model) box.append(el("p", "outline-source", `Outlined by ${result.model}.`));
     show(box);
+    list = rendered;
+    onSections?.(rendered.targets);
   }
 
   async function replan(providerId) {
@@ -110,6 +97,9 @@ export function createOutlinePane({ root }) {
   }
 
   async function send(detail) {
+    // Kept for the progress line, which replaces this message as soon as the
+    // first section lands and should still say who is writing it.
+    current = { ...current, label: detail.label };
     showMessage(`Generating outline with ${detail.label}…`);
     const result = await browser.runtime.sendMessage({
       type: "outline",
@@ -142,11 +132,26 @@ export function createOutlinePane({ root }) {
     showError(String(err?.message ?? err));
   }
 
-  // Progressive fill under either strategy; step 9 renders the partial sections
-  // themselves rather than counting them.
+  // Progressive fill, under either strategy: the sections that have landed are
+  // rendered and clickable straight away, with the rest still to come. The
+  // router also sends a bare `{providerId}` when fallback moves the run, which
+  // carries no sections and is not a render.
   function progress(partial) {
-    if (partial.hash !== current?.hash || !partial.sections) return;
-    showMessage(`Generating outline… ${partial.sections.length} sections so far`);
+    if (partial.hash !== current?.hash || !partial.sections?.length) return;
+    const rendered = outlineList({ sections: partial.sections }, { onJump, partial: true });
+    const box = el("div", "outline-live");
+    box.append(
+      el("p", "pane-placeholder", `Generating outline with ${current.label ?? "the model"}…`),
+      rendered.node,
+    );
+    show(box);
+    list = rendered;
+    onSections?.(rendered.targets);
+  }
+
+  // Driven by the scroll-spy; a no-op in every state but a rendered outline.
+  function setActive(index) {
+    list?.setActive(index);
   }
 
   /** @param {{hash, sections, meta, scanned}} doc the extraction result */
@@ -171,5 +176,5 @@ export function createOutlinePane({ root }) {
   }
 
   showMessage("Waiting for the text layer…");
-  return { start, progress, fail };
+  return { start, progress, fail, setActive };
 }

@@ -1,4 +1,5 @@
 // pdf.js PDFViewer setup: document loading, zoom, and section scrolling.
+import { flashAt } from "./jump-flash.js";
 import { pdfjsLib, EventBus, PDFLinkService, PDFViewer } from "./pdfjs.js";
 
 const { getDocument, GlobalWorkerOptions, AnnotationMode } = pdfjsLib;
@@ -113,6 +114,19 @@ export function createPdfView({ container, viewerEl, onPageChange, onScaleChange
       destArray: [null, { name: "XYZ" }, null, y ?? null, null],
       allowNegativeOffset: true,
     });
+    // Landing somewhere down a dense page is otherwise indistinguishable from
+    // not having moved at all.
+    flashAt(pdfViewer.getPageView(pageNumber - 1), y);
+  }
+
+  // Where a {page, y} target sits in the scroll container, for scroll-spy.
+  // Recomputed on demand rather than cached: zoom, a pane resize and a re-render
+  // each move every one of them.
+  function offsetOf({ page, y }) {
+    const pageView = pdfViewer.getPageView((page ?? 1) - 1);
+    if (!pageView?.div || !pageView.viewport) return null;
+    const [, top] = pageView.viewport.convertToViewportPoint(0, y ?? 0);
+    return pageView.div.offsetTop + top;
   }
 
   // scrollHeight rides along because an exact offset only means anything at the
@@ -155,6 +169,7 @@ export function createPdfView({ container, viewerEl, onPageChange, onScaleChange
     position,
     restorePosition,
     scrollToSection,
+    offsetOf,
     zoomBy,
     destroy,
     eventBus,

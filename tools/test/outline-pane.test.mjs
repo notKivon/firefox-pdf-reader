@@ -120,6 +120,69 @@ await test("the router's refusal renders the card rather than an error", async (
   assert.equal(root.find("pane-error"), null);
 });
 
+await test("a finished outline renders, jumps, and hands its targets to the spy", async () => {
+  const outline = {
+    model: "gemini-3.8-flash",
+    tldr: "Adam adapts a learning rate per parameter.",
+    sections: [{ title: "1 Introduction", page: 1, y: 700, bullets: ["Stochastic optimisation is central."] }],
+  };
+  stubBrowser((message) => (message.type === "plan" ? { ...PLAN, consented: true } : outline));
+
+  const jumps = [];
+  let handed = null;
+  const root = new FakeNode("div");
+  const pane = createOutlinePane({
+    root,
+    onJump: (target) => jumps.push(target),
+    onSections: (targets) => (handed = targets),
+  });
+  pane.start(DOC);
+  await settle();
+
+  assert.ok(root.find("outline-tldr-text"), "the TL;DR is rendered, not counted");
+  root.find("outline-bullet-go").click();
+  assert.deepEqual(jumps, [{ page: 1, y: 700 }], "the bullet jumps to its section");
+  assert.deepEqual(handed, [{ page: 1, y: 700 }], "the spy gets the same targets");
+
+  // The spy only ever speaks to the pane, so this is the path that highlights.
+  pane.setActive(0);
+  assert.ok(root.find("outline-section").classList.contains("is-current"));
+});
+
+await test("leaving the outline for another state tells the spy there is nothing to track", async () => {
+  stubBrowser((message) =>
+    message.type === "plan" ? { ...PLAN, consented: true } : { error: "auth", message: "No API key is stored." },
+  );
+  const handed = [];
+  const root = new FakeNode("div");
+  createOutlinePane({ root, onSections: (targets) => handed.push(targets) }).start(DOC);
+  await settle();
+  // A stale target list would scroll-spy against sections that are no longer on
+  // screen; every state change has to clear it.
+  assert.deepEqual(handed.at(-1), []);
+});
+
+await test("progressive fill renders the sections that have landed, already clickable", async () => {
+  stubBrowser((message) => (message.type === "plan" ? { ...PLAN, consented: true } : new Promise(() => {})));
+  const jumps = [];
+  const root = new FakeNode("div");
+  const pane = createOutlinePane({ root, onJump: (target) => jumps.push(target) });
+  pane.start(DOC);
+  await settle();
+
+  pane.progress({ hash: "abc", sections: [{ title: "1 Introduction", page: 1, y: 700, bullets: ["Present."] }] });
+  assert.ok(root.textContent.includes("Gemini 3.8 Flash"), "the progress line still says who is writing it");
+  root.find("outline-bullet-go").click();
+  assert.deepEqual(jumps, [{ page: 1, y: 700 }]);
+
+  // A fallback notice carries no sections and must not blank what is rendered.
+  pane.progress({ hash: "abc", providerId: "gemini-dev" });
+  assert.ok(root.find("outline-bullet-go"), "the sections already on screen stay");
+  // Nor may a message about a different document.
+  pane.progress({ hash: "other", sections: [{ title: "X", page: 9, y: 1, bullets: ["Wrong paper."] }] });
+  assert.equal(root.findAll("outline-bullet-go").length, 1);
+});
+
 console.log(results.join("\n"));
 console.log(`\n${passed}/${results.length} passed`);
 process.exit(passed === results.length ? 0 : 1);

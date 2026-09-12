@@ -1,0 +1,252 @@
+/* The outline pane's own states: the send confirmation card, the errors, and
+   the outline itself. Split out of theme.css, which holds the tokens and the
+   window chrome. */
+
+/* --- Send confirmation card (step 8) --- */
+
+.confirm-card {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 0 0 16px;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg-raised);
+}
+
+.confirm-heading {
+  margin: 0;
+  font-size: 13px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+}
+
+.confirm-doc {
+  margin: 0;
+  font-weight: 600;
+  word-break: break-word;
+}
+
+.confirm-meta,
+.confirm-cost {
+  margin: 0;
+  color: var(--text-dim);
+}
+
+/* Where the text goes is the question the card exists to answer, so it is the
+   one line that is not dimmed. */
+.confirm-dest {
+  margin: 0;
+  padding: 6px 8px;
+  border-left: 3px solid var(--accent);
+  border-radius: 0 4px 4px 0;
+  background: var(--bg-sunken);
+}
+
+.confirm-dest.is-local {
+  border-left-color: var(--text-dim);
+}
+
+.confirm-what > summary {
+  cursor: pointer;
+  color: var(--text-dim);
+}
+
+.confirm-titles {
+  max-height: 220px;
+  margin: 8px 0 0;
+  padding: 0 0 0 22px;
+  overflow-y: auto;
+  color: var(--text-dim);
+}
+
+.confirm-titles li {
+  margin: 2px 0;
+  word-break: break-word;
+}
+
+.confirm-warn {
+  margin: 0;
+  color: var(--danger);
+}
+
+.confirm-go {
+  padding: 8px 12px;
+  border: 1px solid var(--accent);
+  border-radius: 6px;
+  background: var(--accent);
+  color: var(--bg);
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.confirm-go:disabled {
+  border-color: var(--border);
+  background: var(--bg-sunken);
+  color: var(--text-dim);
+  cursor: not-allowed;
+}
+
+/* Another destination is a deliberate choice, never an automatic one, so it is
+   a secondary control rather than a fallback that happens on its own. */
+.confirm-alt {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  color: var(--text-dim);
+}
+
+.confirm-alt-go {
+  padding: 4px 8px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg-sunken);
+  color: var(--text);
+  font: inherit;
+  cursor: pointer;
+}
+
+.outline-error {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 10px;
+  margin: 0 0 16px;
+}
+
+.pane-error {
+  margin: 0;
+  color: var(--danger);
+}
+
+/* --- The outline itself (step 9) --- */
+
+.outline-tldr {
+  margin: 0 0 10px;
+  padding: 9px 11px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg-raised);
+}
+
+.outline-tldr-label {
+  margin: 0 0 4px;
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+}
+
+.outline-tldr-text {
+  margin: 0;
+}
+
+/* The marker for the section being read sits in the gutter rather than on a
+   border, so a section does not change size when it becomes the current one. */
+.outline-section {
+  position: relative;
+  padding: 8px 0 10px 10px;
+  border-top: 1px solid var(--border);
+}
+
+.outline-section::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 7px;
+  bottom: 7px;
+  width: 2px;
+  border-radius: 2px;
+  background: transparent;
+}
+
+.outline-section.is-current::before {
+  background: var(--accent);
+}
+
+.outline-title {
+  display: flex;
+  gap: 7px;
+  width: 100%;
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--text);
+  font: inherit;
+  font-weight: 600;
+  text-align: left;
+  cursor: pointer;
+}
+
+.outline-title:hover .outline-title-text {
+  color: var(--accent);
+}
+
+.outline-page {
+  flex: 0 0 auto;
+  color: var(--text-dim);
+  font-weight: 400;
+  font-variant-numeric: tabular-nums;
+}
+
+.outline-title-text {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.outline-bullets {
+  margin: 5px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+/* Every bullet jumps to its own section, so each is a control in its own right
+   rather than text with one link above it. */
+.outline-bullet-go {
+  display: flex;
+  gap: 7px;
+  width: 100%;
+  padding: 2px 4px 2px 0;
+  border: none;
+  border-radius: 4px;
+  background: none;
+  color: var(--text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.outline-bullet-go::before {
+  content: "\2022";
+  flex: 0 0 auto;
+  color: var(--text-dim);
+}
+
+.outline-bullet-go:hover {
+  background: var(--bg-raised);
+}
+
+/* A section that failed and a section with nothing in it must never look the
+   same: one is worth retrying, the other is the paper's own structure. */
+.outline-section-error {
+  margin: 5px 0 0;
+  color: var(--danger);
+}
+
+.outline-section-empty,
+.outline-section-pending {
+  margin: 5px 0 0;
+  color: var(--text-dim);
+  font-style: italic;
+}
+
+.outline-source {
+  margin: 12px 0 0;
+  padding-top: 8px;
+  border-top: 1px solid var(--border);
+  color: var(--text-dim);
+}

@@ -8,6 +8,7 @@ import { extractSections } from "../extract/sections.js";
 import { createDebugPane } from "./debug-pane.js";
 import { createOutlinePane } from "./outline-pane.js";
 import { trackReadingPosition } from "./reading-position.js";
+import { trackCurrentSection } from "./scroll-spy.js";
 
 const els = {
   container: document.getElementById("viewerContainer"),
@@ -125,7 +126,21 @@ async function main() {
     return;
   }
 
-  const outlinePane = createOutlinePane({ root: els.outline });
+  // The two halves of section jumping, and each needs the other: the pane sends
+  // the reader to a place in the paper, and where the reader is sends the pane
+  // back a section. The spy is built first and reaches the pane through the
+  // binding below, which is assigned before any scroll event can fire.
+  let outlinePane;
+  const spy = trackCurrentSection({
+    container: els.container,
+    view,
+    onChange: (index) => outlinePane?.setActive(index),
+  });
+  outlinePane = createOutlinePane({
+    root: els.outline,
+    onJump: (target) => view.scrollToSection(target),
+    onSections: (targets) => spy.setSections(targets),
+  });
   browser.runtime.onMessage.addListener((message) => {
     if (message?.type === "outline-progress") outlinePane.progress(message);
   });

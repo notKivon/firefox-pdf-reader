@@ -6,17 +6,9 @@
 // machine — and nothing is sent until the button is pressed. There is no
 // auto-dismiss and no timeout: the paper reads in the left pane regardless,
 // which is what makes blocking here acceptable.
-//
-// Built with DOM calls rather than innerHTML: the titles are text lifted out of
-// an untrusted PDF.
-const DESTINATION_NAMES = { google: "Google", local: "this machine" };
+import { el } from "./el.js";
 
-function el(tag, className, text) {
-  const node = document.createElement(tag);
-  if (className) node.className = className;
-  if (text !== undefined) node.textContent = text;
-  return node;
-}
+const DESTINATION_NAMES = { google: "Google", local: "this machine" };
 
 const plural = (n, word) => `${n.toLocaleString("en")} ${word}${n === 1 ? "" : "s"}`;
 

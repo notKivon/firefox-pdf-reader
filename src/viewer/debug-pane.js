@@ -1,15 +1,8 @@
 // Step 5/6 debug panel: shows the detected column layout and the reading order
 // the extractor produced, so a bad layout is diagnosable rather than mysterious.
-// Built with DOM calls rather than innerHTML — the CSP allows it either way,
-// but page text is untrusted input and this keeps it inert.
-const SCANNED_CHARS_PER_PAGE = 200;
+import { el } from "./el.js";
 
-function el(tag, className, text) {
-  const node = document.createElement(tag);
-  if (className) node.className = className;
-  if (text !== undefined) node.textContent = text;
-  return node;
-}
+const SCANNED_CHARS_PER_PAGE = 200;
 
 export function createDebugPane({ root, onJump }) {
   root.replaceChildren();

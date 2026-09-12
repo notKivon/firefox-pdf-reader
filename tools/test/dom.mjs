@@ -14,6 +14,17 @@ export class FakeNode {
   append(...nodes) { this.children.push(...nodes); }
   replaceChildren(...nodes) { this.children = nodes; this._text = ""; }
   addEventListener(type, fn) { (this.listeners[type] ??= []).push(fn); }
+  // Enough of one for the scroll-spy's current-section marker, which is a class
+  // and is therefore invisible to a test without it.
+  get classList() {
+    const node = this;
+    const parts = () => node.className.split(" ").filter(Boolean);
+    return {
+      add(name) { if (!parts().includes(name)) node.className = [...parts(), name].join(" "); },
+      remove(name) { node.className = parts().filter((c) => c !== name).join(" "); },
+      contains(name) { return parts().includes(name); },
+    };
+  }
   click() { for (const fn of this.listeners.click ?? []) fn(); }
   find(className) {
     if (this.className.split(" ").includes(className)) return this;
