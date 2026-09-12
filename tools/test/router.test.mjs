@@ -1,5 +1,10 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
+import { installIndexedDb } from "./idb.mjs";
+
+// `plan` reads the consent store, so the database has to exist. Nothing is
+// granted in this file: every assertion here is about the unconsented state.
+installIndexedDb();
 
 // The router reads storage.local for the API key; nothing else of the browser
 // surface is touched by `plan`.

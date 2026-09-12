@@ -1,10 +1,11 @@
 // IndexedDB "scholar-reader": one shared connection, thin promise helpers.
 // Every store module (docs, outlines, quota) goes through here.
 const DB_NAME = "scholar-reader";
-const DB_VERSION = 1;
+const DB_VERSION = 2;
 
 export const DOCS = "docs";
 export const OUTLINES = "outlines";
+export const CONSENTS = "consents";
 export const QUOTA = "quota";
 
 let connection = null;
@@ -20,6 +21,14 @@ function upgrade(db) {
     // Every cached outline for one document, across providers and prompt
     // versions, has to be findable together to evict it.
     outlines.createIndex("hash", "hash", { unique: false });
+  }
+  if (!db.objectStoreNames.contains(CONSENTS)) {
+    // Version 2 adds this and nothing else: an absent grant is correctly read as
+    // "ask", so there is no migration to write.
+    const consents = db.createObjectStore(CONSENTS, { keyPath: "key" });
+    // Same reason as outlines: every grant for one document has to be revocable
+    // together (step 14).
+    consents.createIndex("hash", "hash", { unique: false });
   }
   if (!db.objectStoreNames.contains(QUOTA)) {
     db.createObjectStore(QUOTA, { keyPath: "key" });
@@ -37,7 +46,17 @@ export function openDb() {
       return;
     }
     request.onupgradeneeded = () => upgrade(request.result);
-    request.onsuccess = () => resolve(request.result);
+    request.onsuccess = () => {
+      // The viewer and the background page each hold their own connection to one
+      // database, so the next version bump would be blocked by whichever opened
+      // first. Closing on `versionchange` lets the other context upgrade; the
+      // next call reopens.
+      request.result.onversionchange = () => {
+        request.result.close();
+        connection = null;
+      };
+      resolve(request.result);
+    };
     request.onerror = () =>
       reject(new Error(`IndexedDB could not be opened: ${request.error?.message ?? "unknown error"}`));
     request.onblocked = () =>
@@ -76,6 +95,19 @@ export async function put(storeName, value) {
   tx.objectStore(storeName).put(value);
   await txDone(tx);
   return value;
+}
+
+export async function del(storeName, key) {
+  const db = await openDb();
+  const tx = db.transaction(storeName, "readwrite");
+  tx.objectStore(storeName).delete(key);
+  await txDone(tx);
+}
+
+export async function getAllByIndex(storeName, indexName, value) {
+  const db = await openDb();
+  const index = db.transaction(storeName, "readonly").objectStore(storeName).index(indexName);
+  return requestDone(index.getAll(value));
 }
 
 // Read-modify-write inside one transaction, so two tabs opening the same paper

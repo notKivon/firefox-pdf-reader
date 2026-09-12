@@ -8,7 +8,7 @@
     "build": "node esbuild.config.mjs",
     "watch": "node esbuild.config.mjs --watch",
     "check:secrets": "node tools/check-secrets.mjs",
-    "test": "node tools/test/adapter.test.mjs && node tools/test/router.test.mjs",
+    "test": "node tools/test/adapter.test.mjs && node tools/test/router.test.mjs && node tools/test/consent.test.mjs && node tools/test/confirm-card.test.mjs && node tools/test/outline-pane.test.mjs",
     "probe": "node tools/live-probe.mjs"
   },
   "dependencies": {

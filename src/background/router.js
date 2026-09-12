@@ -8,9 +8,10 @@
 import { outline as generateOutline } from "../model/adapter.js";
 import { estimateCost, estimateTokens, totalChars } from "../model/estimate.js";
 import { ProviderError } from "../model/errors.js";
-import { DEFAULT_PROVIDER_ID, getProvider } from "../model/providers.js";
+import { DEFAULT_PROVIDER_ID, getProvider, PROVIDERS } from "../model/providers.js";
 import { getApiKey } from "../store/apikeys.js";
 import { cacheKey } from "../store/cache-key.js";
+import { isConsented } from "../store/consent.js";
 
 const PROGRESS_MESSAGE = "outline-progress";
 
@@ -28,13 +29,18 @@ export async function plan({ hash, sections, meta = {}, providerId = DEFAULT_PRO
   const chars = totalChars(sendable);
   const estTokens = estimateTokens(chars);
   const requests = provider.strategy === "whole-document" ? 1 : sendable.length + 1;
+  const key = cacheKey(hash, providerId);
 
   return {
-    cacheKey: cacheKey(hash, providerId),
+    cacheKey: key,
+    hash,
+    title: meta.title ?? "",
+    pageCount: meta.pageCount ?? 0,
     providerId,
     model: provider.model,
     destination: provider.destination,
     label: provider.label,
+    host: hostOf(provider.baseUrl),
     strategy: provider.strategy,
     sectionCount: sendable.length,
     sectionTitles: sendable.map((section) => section.title),
@@ -43,23 +49,40 @@ export async function plan({ hash, sections, meta = {}, providerId = DEFAULT_PRO
     estCost: estimateCost(providerId, estTokens, requests),
     requests,
     hasKey: (await getApiKey(provider.keyRef)) !== null,
-    // Both arrive with the steps that own them: consent in step 8, the cache in
-    // step 10. Until then the honest answer to each is "no", which is also the
-    // safe one — see the gate in `runOutline`.
-    consented: false,
+    // The reader may deliberately choose another destination; nothing ever
+    // reaches one automatically (CLAUDE.md), so the card offers them by name.
+    alternatives: alternativesTo(provider.destination),
+    consented: await consentedOrFalse(key),
+    // Step 10's, along with the outline cache itself. "No" is the safe answer
+    // until then: it costs a confirmation, never a silent send.
     cacheHit: false,
   };
 }
 
-// CLAUDE.md: no document's text is sent to any model until the reader confirms
-// it for that cache key, and the check is the router's, not the viewer's.
-//
-// Step 8 replaces this with a read of `store/consent.js`. Until that store
-// exists there are no grants, so every send is refused — which is the correct
-// failure direction, and means the viewer's confirm card is what unblocks the
-// path rather than the router quietly allowing it in the meantime.
-async function isConsented(_key) {
-  return false;
+function hostOf(baseUrl) {
+  try {
+    return new URL(baseUrl).host;
+  } catch {
+    return baseUrl;
+  }
+}
+
+function alternativesTo(destination) {
+  return Object.entries(PROVIDERS)
+    .filter(([, p]) => p.destination !== destination)
+    .map(([id, p]) => ({ id, label: p.label, destination: p.destination }));
+}
+
+// An unreadable store must read as "not consented" — never as consented. The
+// card then renders and the real gate below, which does not swallow, is what
+// reports the store failure if the reader goes ahead.
+async function consentedOrFalse(key) {
+  try {
+    return await isConsented(key);
+  } catch (err) {
+    console.warn("[scholar-reader] consent record unreadable", err);
+    return false;
+  }
 }
 
 /**
@@ -68,6 +91,9 @@ async function isConsented(_key) {
  */
 export async function runOutline(request, tabId) {
   const detail = await plan(request);
+  // Deliberately re-read rather than trusting `detail.consented`: the gate is
+  // the router's own read of the store, so nothing the viewer sends — a stubbed
+  // check, a forged flag on the message — can stand in for a grant.
   if (!(await isConsented(detail.cacheKey))) {
     // Not an error the pane reports as a failure: it is the card's cue.
     return { error: "consent-required", plan: detail };

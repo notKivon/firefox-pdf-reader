@@ -302,3 +302,132 @@ body {
   --page-box-shadow: 0 2px 8px var(--shadow);
   border: none;
 }
+
+/* --- Send confirmation card (step 8) --- */
+
+.confirm-card {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 0 0 16px;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg-raised);
+}
+
+.confirm-heading {
+  margin: 0;
+  font-size: 13px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+}
+
+.confirm-doc {
+  margin: 0;
+  font-weight: 600;
+  word-break: break-word;
+}
+
+.confirm-meta,
+.confirm-cost {
+  margin: 0;
+  color: var(--text-dim);
+}
+
+/* Where the text goes is the question the card exists to answer, so it is the
+   one line that is not dimmed. */
+.confirm-dest {
+  margin: 0;
+  padding: 6px 8px;
+  border-left: 3px solid var(--accent);
+  border-radius: 0 4px 4px 0;
+  background: var(--bg-sunken);
+}
+
+.confirm-dest.is-local {
+  border-left-color: var(--text-dim);
+}
+
+.confirm-what > summary {
+  cursor: pointer;
+  color: var(--text-dim);
+}
+
+.confirm-titles {
+  max-height: 220px;
+  margin: 8px 0 0;
+  padding: 0 0 0 22px;
+  overflow-y: auto;
+  color: var(--text-dim);
+}
+
+.confirm-titles li {
+  margin: 2px 0;
+  word-break: break-word;
+}
+
+.confirm-warn {
+  margin: 0;
+  color: var(--danger);
+}
+
+.confirm-go {
+  padding: 8px 12px;
+  border: 1px solid var(--accent);
+  border-radius: 6px;
+  background: var(--accent);
+  color: var(--bg);
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.confirm-go:disabled {
+  border-color: var(--border);
+  background: var(--bg-sunken);
+  color: var(--text-dim);
+  cursor: not-allowed;
+}
+
+/* Another destination is a deliberate choice, never an automatic one, so it is
+   a secondary control rather than a fallback that happens on its own. */
+.confirm-alt {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  color: var(--text-dim);
+}
+
+.confirm-alt-go {
+  padding: 4px 8px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg-sunken);
+  color: var(--text);
+  font: inherit;
+  cursor: pointer;
+}
+
+.outline-error {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 10px;
+  margin: 0 0 16px;
+}
+
+.pane-error {
+  margin: 0;
+  color: var(--danger);
+}
+
+.outline-tldr {
+  margin: 0 0 8px;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg-raised);
+}

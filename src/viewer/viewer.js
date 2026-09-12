@@ -1,13 +1,13 @@
 // Viewer entry point: boots the PDF pane and wires the reading chrome.
 import { createPdfView, fetchPdf } from "./pdfview.js";
 import { initTheme } from "./theme.js";
-import { recordOpen, readingPosition, saveReadingPosition, sha256Hex } from "../store/docs.js";
+import { recordOpen, readingPosition, sha256Hex } from "../store/docs.js";
 import { charsPerPage, extractPages, modalFontName } from "../extract/textlayer.js";
 import { layoutDocument } from "../extract/columns.js";
 import { extractSections } from "../extract/sections.js";
 import { createDebugPane } from "./debug-pane.js";
-
-const SAVE_DEBOUNCE_MS = 600;
+import { createOutlinePane } from "./outline-pane.js";
+import { trackReadingPosition } from "./reading-position.js";
 
 const els = {
   container: document.getElementById("viewerContainer"),
@@ -16,6 +16,7 @@ const els = {
   statusTitle: document.querySelector("#pdf-status .status-title"),
   statusDetail: document.querySelector("#pdf-status .status-detail"),
   note: document.getElementById("pane-note"),
+  outline: document.getElementById("outline-root"),
   debug: document.getElementById("debug-pane"),
   title: document.getElementById("doc-title"),
   page: document.getElementById("page-indicator"),
@@ -53,49 +54,9 @@ function documentName(url) {
   }
 }
 
-function debounce(fn, ms) {
-  let timer = null;
-  const run = () => {
-    timer = null;
-    fn();
-  };
-  const wrapped = () => {
-    clearTimeout(timer);
-    timer = setTimeout(run, ms);
-  };
-  wrapped.flush = () => {
-    if (timer !== null) {
-      clearTimeout(timer);
-      run();
-    }
-  };
-  return wrapped;
-}
-
 function setDocumentTitle(name) {
   els.title.textContent = name;
   document.title = `${name} — Scholar Reader`;
-}
-
-// Restores where the reader left off, then keeps the record up to date.
-function trackReadingPosition(view, hash, position) {
-  const save = debounce(() => {
-    saveReadingPosition(hash, view.position()).catch((err) => {
-      console.warn("[scholar-reader] reading position not saved", err);
-      showNote(`Reading position is not being saved: ${err.message}`);
-    });
-  }, SAVE_DEBOUNCE_MS);
-
-  view.whenReady(() => {
-    view.restorePosition(position);
-    // Attached only after the restore, so the pristine top-of-document position
-    // never overwrites the saved one.
-    els.container.addEventListener("scroll", save, { passive: true });
-    window.addEventListener("pagehide", () => save.flush());
-    document.addEventListener("visibilitychange", () => {
-      if (document.visibilityState === "hidden") save.flush();
-    });
-  });
 }
 
 // Extraction is its own failure domain too: a paper that defeats the text layer
@@ -164,21 +125,41 @@ async function main() {
     return;
   }
 
-  runExtraction(view, doc).catch((err) => {
-    console.error("[scholar-reader] extraction pane failed", err);
+  const outlinePane = createOutlinePane({ root: els.outline });
+  browser.runtime.onMessage.addListener((message) => {
+    if (message?.type === "outline-progress") outlinePane.progress(message);
   });
+
+  // Started before the store round-trip rather than after it: extraction is the
+  // slow part, and the outline needs its sections before it needs the title.
+  const extraction = runExtraction(view, doc);
 
   // Identity and history are a separate failure domain from rendering: a broken
   // IndexedDB must not cost the reader the paper.
+  let meta = { title: documentName(file), pageCount: doc.numPages };
   try {
     const record = await recordOpen({ hash, url: file, pdfDoc: doc });
     console.info(`[scholar-reader] document ${hash} — ${record.urls.length} url(s) on record`);
     setDocumentTitle(record.title);
-    trackReadingPosition(view, hash, readingPosition(record));
+    meta = { title: record.title, pageCount: record.pageCount };
+    trackReadingPosition({ view, hash, container: els.container, position: readingPosition(record), onNote: showNote });
   } catch (err) {
     console.error("[scholar-reader] document store unavailable", err);
     showNote(`Reading position and outlines cannot be stored: ${err.message}`);
   }
+
+  // Extraction gates the outline: the pane cannot say what would be sent until
+  // it knows what the sections are.
+  extraction
+    .then((result) => {
+      // No sections means no card and no spinner: the pane says why instead.
+      if (result) outlinePane.start({ hash, meta, sections: result.sections, scanned: result.scanned });
+      else outlinePane.fail("The text layer could not be read, so there is nothing to outline.");
+    })
+    .catch((err) => {
+      console.error("[scholar-reader] extraction pane failed", err);
+      outlinePane.fail(`The outline pane failed to start: ${err.message}`);
+    });
 }
 
 main().catch((err) => {
