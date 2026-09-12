@@ -10,11 +10,12 @@ export const MAX_BULLET_WORDS = 20;
 
 const RULES = [
   "Write 2 to 4 bullets for each section. Never fewer than 2, never more than 4.",
-  `Each bullet is at most ${MAX_BULLET_WORDS} words.`,
+  `Each bullet is at most ${MAX_BULLET_WORDS} words. This is a hard limit: count the words, and drop detail rather than exceed it. A bullet of ${MAX_BULLET_WORDS + 1} words is wrong.`,
   "Be extractive: restate what the section says. Never infer, evaluate, speculate, or add anything the text does not state.",
   "Where the section reports numbers, keep them verbatim — values, units, percentages, dataset sizes, model names.",
+  "If the section reports results or measurements, at least one bullet must carry the specific figures it reports, not a description of them.",
   "Write nothing about the reference list, acknowledgements or funding.",
-  "Echo each section's title back exactly as it was given, character for character, including its numbering.",
+  "Echo the value of each section's Title field back exactly as given, character for character, including its numbering. Never answer with any other text as the title.",
 ].map((rule) => `- ${rule}`).join("\n");
 
 const SYSTEM = `You summarise sections of an academic paper for a researcher skimming it.
@@ -27,8 +28,15 @@ const TLDR_RULE = "Also write a TL;DR for the whole paper: at most 2 sentences, 
 
 const plural = (n) => `${n} ${n === 1 ? "section" : "sections"}`;
 
-function sectionBlock(section, index) {
-  return `### Section ${index + 1}\nTitle: ${section.title}\n\n${section.text}`;
+// The section's own title must be the only thing in the block that looks like a
+// title. An earlier version opened each block with "### Section N", and a
+// per-section request echoed back "### Section 1" as the title — caught by the
+// adapter's checksum, but it cost that section its bullets. Under
+// whole-document the ordinal has to be there for the model to keep its place,
+// so it is carried as a labelled field rather than as a heading.
+function sectionBlock(section, index, { ordinal = true } = {}) {
+  const head = ordinal ? `[Section ${index + 1} of the paper]\n` : "";
+  return `${head}Title: ${section.title}\n\nText:\n${section.text}`;
 }
 
 /** One request carrying the whole paper. Used by `whole-document` providers. */
@@ -51,7 +59,12 @@ export function sectionMessages(section, meta = {}) {
   const header = meta.title ? `Paper: ${meta.title}\n\n` : "";
   return [
     { role: "system", content: SYSTEM },
-    { role: "user", content: `${header}Summarise this one section.\n\n${sectionBlock(section, 0)}` },
+    {
+      role: "user",
+      content:
+        `${header}Summarise this one section. Echo its title back exactly as ` +
+        `"${section.title}".\n\n${sectionBlock(section, 0, { ordinal: false })}`,
+    },
   ];
 }
 

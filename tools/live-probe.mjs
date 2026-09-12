@@ -58,19 +58,28 @@ function report(label, result, sent) {
     return out?.bullets.some((b) => NUMBER.test(b));
   });
 
+  const failed = result.sections.filter((s) => s.error);
+  const emptyInput = result.sections.filter((s) => !s.error && s.bullets.length === 0);
+
   console.log(`\n=== ${label} — ${provider.label} (${provider.strategy}) ===`);
   console.log(`sections in/out        ${sent.length} / ${result.sections.length}`);
   console.log(`sections with bullets  ${filled.length}`);
+  console.log(`sections that failed   ${failed.length}` +
+    (failed.length ? `  — ${failed.map((s) => `"${s.title}": ${s.error}`).join(" | ")}` : ""));
+  console.log(`sections with no text  ${emptyInput.length} (never sent, correctly bullet-less)`);
   console.log(`bullets per section    min ${Math.min(...counts)}, max ${Math.max(...counts)}` +
     `  [${counts.join(" ")}]`);
   console.log(`outside 2-4            ${counts.filter((n) => n < 2 || n > 4).length}`);
   console.log(`bullets over ${MAX_BULLET_WORDS} words  ${long.length}` +
     (long.length ? `  at positions ${long.map((l) => l.position).join(", ")} of ${filled.length}` : ""));
-  console.log(`results sections keeping numbers  ${keptNumbers.length}/${numeric.length}`);
+  const lostNumbers = numeric.filter((s) => !keptNumbers.includes(s));
+  console.log(`results sections keeping numbers  ${keptNumbers.length}/${numeric.length}` +
+    (lostNumbers.length ? `  — lost by ${lostNumbers.map((s) => `"${s.title}"`).join(", ")}` : ""));
   console.log(`requests ${result.usage.requests}, tokens in ${result.usage.promptTokens}, out ${result.usage.completionTokens}`);
   console.log(`TL;DR: ${result.tldr}`);
-  console.log(`\nfirst section — ${result.sections[0].title} (p${result.sections[0].page})`);
-  for (const bullet of result.sections[0].bullets) console.log(`  • ${bullet} [${words(bullet)}w]`);
+  const sample = filled[0] ?? result.sections[0];
+  console.log(`\nsample section — ${sample.title} (p${sample.page})`);
+  for (const bullet of sample.bullets ?? []) console.log(`  • ${bullet} [${words(bullet)}w]`);
   if (long.length) {
     console.log(`\nlongest bullet: ${long.sort((a, b) => b.words - a.words)[0].words} words ` +
       `in "${long[0].title}"`);
