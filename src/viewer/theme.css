@@ -42,10 +42,15 @@ body {
   flex-direction: column;
   background: var(--bg);
   color: var(--text);
-  /* The math fonts are a safety net behind extract/normalize.js, which is the
-     actual fix: they only ever get asked for a glyph the UI faces lack, and
-     they are ignored where they are not installed. */
-  font: 13px/1.5 system-ui, -apple-system, "Segoe UI", "STIX Two Math", "Apple Symbols", sans-serif;
+  /* Symbol faces behind the UI ones, asked only for a glyph the UI faces lack
+     and ignored where they are not installed. The SF faces cover no math
+     operators at all: ⊙ (U+2299) and ∝ (U+221D) are both absent, and STIX Two
+     Math has the first but not the second — ∝ lives in STIXVariants — so the
+     order matters. Apple Symbols has both and ships with macOS, and is first
+     because it blends with SF; Arial Unicode MS is the backstop. */
+  font:
+    13px/1.5 system-ui, -apple-system, "Segoe UI", "Apple Symbols", "STIX Two Math", "Arial Unicode MS",
+    sans-serif;
   overflow: hidden;
 }
 
