@@ -6,12 +6,18 @@
 // the wrong heading, and the result would be cached and served afterwards with
 // no network request and no confirmation — so a mismatch is a malformed
 // response, surfaced as an error, never a best-effort render.
+import { normalizeText } from "../extract/normalize.js";
 import { ProviderError } from "./errors.js";
 
 // Compared leniently enough to survive a model normalising whitespace or case,
 // strictly enough that a different heading cannot pass: the words must match.
+//
+// Math styling is folded in too. Titles are normalised at extraction now, so the
+// model is sent plain letters — but a model that renders `3 Method` back as
+// math-italic would otherwise fail the checksum, and that failure is fatal to
+// the whole response. Folding it costs nothing: `𝟑` and `3` are the same title.
 export function normaliseTitle(title) {
-  return String(title ?? "")
+  return normalizeText(String(title ?? ""))
     .toLowerCase()
     .replace(/\s+/g, " ")
     .trim()

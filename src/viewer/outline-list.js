@@ -5,6 +5,7 @@
 // into the section, not a location of its own. The title rendered is always the
 // extracted one; the model's echo is a checksum and never reaches the screen.
 import { el } from "./el.js";
+import { normalizeText } from "../extract/normalize.js";
 
 const targetOf = (section) => ({ page: section.page, y: section.y });
 
@@ -12,7 +13,9 @@ function bulletList(section, onJump) {
   const list = el("ul", "outline-bullets");
   for (const bullet of section.bullets) {
     const item = el("li", "outline-bullet");
-    const go = el("button", "outline-bullet-go", bullet);
+    // Normalised here as well as at extraction: this text is the model's, and a
+    // model echoing the paper's notation can reintroduce the same glyphs.
+    const go = el("button", "outline-bullet-go", normalizeText(bullet));
     go.type = "button";
     go.addEventListener("click", () => onJump?.(targetOf(section)));
     item.append(go);
@@ -34,7 +37,10 @@ function sectionBlock(section, onJump, partial) {
   const block = el("section", "outline-section");
   const heading = el("button", "outline-title");
   heading.type = "button";
-  heading.append(el("span", "outline-page", `p${section.page}`), el("span", "outline-title-text", section.title));
+  heading.append(
+    el("span", "outline-page", `p${section.page}`),
+    el("span", "outline-title-text", normalizeText(section.title)),
+  );
   heading.addEventListener("click", () => onJump?.(targetOf(section)));
   block.append(heading, section.bullets?.length ? bulletList(section, onJump) : emptyBody(section, partial));
   return block;
@@ -50,7 +56,7 @@ export function outlineList(result, { onJump, partial = false } = {}) {
 
   if (result.tldr) {
     const box = el("div", "outline-tldr");
-    box.append(el("h2", "outline-tldr-label", "In short"), el("p", "outline-tldr-text", result.tldr));
+    box.append(el("h2", "outline-tldr-label", "In short"), el("p", "outline-tldr-text", normalizeText(result.tldr)));
     node.append(box);
   }
 

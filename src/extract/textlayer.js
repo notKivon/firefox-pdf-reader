@@ -4,6 +4,7 @@
 // still yields screen-reading coordinates (origin top-left, y increasing down).
 // Each item also keeps its raw PDF-space baseline as `pdfY`, because that is
 // what scrollPageIntoView's XYZ destination wants.
+import { normalizeText } from "./normalize.js";
 import { pdfjsLib } from "../viewer/pdfjs.js";
 
 const { Util } = pdfjsLib;
@@ -48,7 +49,10 @@ export async function extractPageItems(pdfDoc, pageNumber) {
     const t = Util.transform(viewport.transform, item.transform);
     const { width, height } = extents(item, rotated);
     const record = {
-      str: item.str,
+      // The one place text enters the pipeline, so the one place it needs
+      // making renderable: titles, section text, the confirm card and what is
+      // sent to a model all come from here.
+      str: normalizeText(item.str),
       x: t[4],
       y: t[5],
       width,

@@ -42,7 +42,10 @@ body {
   flex-direction: column;
   background: var(--bg);
   color: var(--text);
-  font: 13px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif;
+  /* The math fonts are a safety net behind extract/normalize.js, which is the
+     actual fix: they only ever get asked for a glyph the UI faces lack, and
+     they are ignored where they are not installed. */
+  font: 13px/1.5 system-ui, -apple-system, "Segoe UI", "STIX Two Math", "Apple Symbols", sans-serif;
   overflow: hidden;
 }
 
