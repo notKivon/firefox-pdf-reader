@@ -56,3 +56,37 @@ export function normalizeText(str) {
     .replace(RESTYLED, (ch) => ch.normalize("NFKC"))
     .replace(DELIMITERS, (ch) => DELIMITER_PIECES.get(ch) ?? ch);
 }
+
+// A model writes LaTeX even when the paper's text layer contains none. Reported
+// live: a Gemma bullet carried `$\mathbf{z}$` where it meant `z`. None of the
+// eleven fixtures has a single `$…$` or `\mathbf` in its extracted text, so this
+// is the model's own notation and not something coming out of a PDF — which is
+// why it is stripped here, on the way out, and `normalizeText` is left alone.
+// Extraction staying byte-identical is load-bearing: heading detection, section
+// text, the cache key and the model payload all read it (PROGRESS.md).
+//
+// Conservative on purpose. Only the wrappers whose meaning is "this is maths"
+// or "set this in bold" are removed, and always by keeping what they contain —
+// nothing is dropped, invented or reordered. Anything unrecognised is left
+// exactly as the model wrote it, because a bullet that reads oddly is better
+// than one that quietly says something else.
+const MATH_COMMAND = /\\(?:math(?:bf|rm|it|cal|sf|tt|bb|frak)|text(?:bf|it|rm)?|bm|boldsymbol|operatorname|mbox)\s*\{([^{}]*)\}/g;
+const INLINE_MATH = /\$([^$\n]{1,200})\$|\\\(([^\n]{1,200}?)\\\)/g;
+
+/**
+ * `normalizeText`, plus the LaTeX a model adds of its own accord.
+ * @param {string} str @returns {string}
+ */
+export function normalizeModelText(str) {
+  if (!str) return str;
+  let out = normalizeText(str);
+  // Repeated because the wrappers nest: `$\mathbf{z}$` needs both passes, and
+  // `\text{\bf x}` needs two of the inner one. Bounded so a pathological
+  // string cannot spin here.
+  for (let pass = 0; pass < 3; pass++) {
+    const before = out;
+    out = out.replace(MATH_COMMAND, "$1").replace(INLINE_MATH, (_, a, b) => a ?? b);
+    if (out === before) break;
+  }
+  return out;
+}

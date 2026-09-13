@@ -91,6 +91,65 @@ test("exactly one section is current at a time, and -1 clears it", () => {
   assert.deepEqual(blocks.map((b) => b.classList.contains("is-current")), [false, false, false, false]);
 });
 
+// ---- reported live 2026-09-13: the pane's text could not be selected or copied
+test("a bullet is selectable text, not a button label", () => {
+  const rendered = outlineList(RESULT, {});
+  const bullet = rendered.node.find("outline-bullet-go");
+  const heading = rendered.node.find("outline-title");
+  // The whole reason this is not a <button>: a button's label cannot be
+  // selected, and these bullets are prose the reader wants to quote.
+  assert.notEqual(bullet.tag, "button", "a bullet must not be a button");
+  assert.notEqual(heading.tag, "button", "nor a heading");
+  // The affordance a button gave for free, kept by hand.
+  assert.equal(bullet.getAttribute("role"), "button");
+  assert.equal(bullet.tabIndex, 0, "still a tab stop");
+  assert.equal(heading.getAttribute("role"), "button");
+  assert.equal(heading.tabIndex, 0);
+});
+
+test("Enter and Space still jump; other keys do not", () => {
+  const jumps = [];
+  const rendered = outlineList(RESULT, { onJump: (t) => jumps.push(t) });
+  const bullet = rendered.node.find("outline-bullet-go");
+
+  assert.equal(bullet.keydown("Enter"), true, "Enter is handled, so it is prevented");
+  assert.equal(bullet.keydown(" "), true, "Space too — it would otherwise scroll");
+  assert.equal(jumps.length, 2);
+  assert.equal(bullet.keydown("a"), false, "typing is not activation");
+  assert.equal(jumps.length, 2);
+});
+
+test("a click that ends a text selection does not jump the paper", () => {
+  const jumps = [];
+  const rendered = outlineList(RESULT, { onJump: (t) => jumps.push(t) });
+  const bullet = rendered.node.find("outline-bullet-go");
+
+  // A drag that selects inside the bullet still fires a click. Jumping then
+  // would throw the reader's place away at the moment they went to copy.
+  const selected = { isCollapsed: false, toString: () => "some words", anchorNode: bullet, focusNode: bullet };
+  bullet.ownerDocument = { defaultView: { getSelection: () => selected } };
+  bullet.click();
+  assert.equal(jumps.length, 0, "selecting is not clicking");
+
+  // A collapsed selection — an ordinary click — still jumps.
+  bullet.ownerDocument = { defaultView: { getSelection: () => ({ isCollapsed: true, toString: () => "" }) } };
+  bullet.click();
+  assert.equal(jumps.length, 1);
+});
+
+test("LaTeX the model wrote is unwrapped, and reported numbers survive", () => {
+  const rendered = outlineList(
+    {
+      tldr: "The model $\\mathbf{z}$ is trained.",
+      sections: [{ title: "3 RESULTS", page: 4, y: 600, bullets: ["Reaches $28.4$ BLEU with \\mathbf{x}."] }],
+    },
+    {},
+  );
+  const bullet = rendered.node.find("outline-bullet-go");
+  assert.equal(bullet.textContent, "Reaches 28.4 BLEU with x.");
+  assert.equal(rendered.node.find("outline-tldr-text").textContent, "The model z is trained.");
+});
+
 console.log(results.join("\n"));
 console.log(`\n${passed}/${results.length} passed`);
 process.exit(passed === results.length ? 0 : 1);

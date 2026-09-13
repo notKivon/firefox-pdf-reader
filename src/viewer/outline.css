@@ -168,18 +168,25 @@
   background: var(--accent);
 }
 
+/* Not a <button>: the reader has to be able to select and copy this text, and
+   a button's label cannot be selected. The jump affordance is rebuilt by hand
+   in outline-list.js — role, tab stop, Enter and Space. */
 .outline-title {
   display: flex;
   gap: 7px;
   width: 100%;
-  padding: 0;
-  border: none;
-  background: none;
   color: var(--text);
-  font: inherit;
   font-weight: 600;
   text-align: left;
   cursor: pointer;
+  user-select: text;
+}
+
+.outline-title:focus-visible,
+.outline-bullet-go:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+  border-radius: 4px;
 }
 
 .outline-title:hover .outline-title-text {
@@ -205,19 +212,18 @@
 }
 
 /* Every bullet jumps to its own section, so each is a control in its own right
-   rather than text with one link above it. */
+   rather than text with one link above it — but it is prose first, and prose is
+   for reading and quoting. See .outline-title above. */
 .outline-bullet-go {
   display: flex;
   gap: 7px;
   width: 100%;
   padding: 2px 4px 2px 0;
-  border: none;
   border-radius: 4px;
-  background: none;
   color: var(--text);
-  font: inherit;
   text-align: left;
   cursor: pointer;
+  user-select: text;
 }
 
 .outline-bullet-go::before {

@@ -14,6 +14,13 @@ export class FakeNode {
   append(...nodes) { this.children.push(...nodes); }
   replaceChildren(...nodes) { this.children = nodes; this._text = ""; }
   addEventListener(type, fn) { (this.listeners[type] ??= []).push(fn); }
+  setAttribute(name, value) { (this.attrs ??= {})[name] = String(value); }
+  getAttribute(name) { return this.attrs?.[name] ?? null; }
+  // Enough for the jump guard, which asks whether a selection is inside it.
+  contains(node) {
+    if (node === this) return true;
+    return this.children.some((child) => child.contains?.(node));
+  }
   // Enough of one for the scroll-spy's current-section marker, which is a class
   // and is therefore invisible to a test without it.
   get classList() {
@@ -26,6 +33,12 @@ export class FakeNode {
     };
   }
   click() { for (const fn of this.listeners.click ?? []) fn(); }
+  keydown(key) {
+    let defaultPrevented = false;
+    const event = { key, preventDefault() { defaultPrevented = true; } };
+    for (const fn of this.listeners.keydown ?? []) fn(event);
+    return defaultPrevented;
+  }
   find(className) {
     if (this.className.split(" ").includes(className)) return this;
     for (const child of this.children) {

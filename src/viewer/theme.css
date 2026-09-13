@@ -85,6 +85,12 @@ body {
 }
 
 #toolbar button {
+  /* Centres a drawn icon as readily as a word: the theme toggle's content is an
+     inline SVG, because a glyph from a symbol font is a dependency this control
+     cannot afford (see theme.js). */
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   min-width: 28px;
   height: 26px;
   padding: 0 7px;
