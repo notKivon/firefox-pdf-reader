@@ -8,7 +8,7 @@ export class ProviderError extends Error {
   /**
    * @param {string} message reader-facing text
    * @param {object} info
-   * @param {"rate-limit"|"auth"|"network"|"origin-refused"|"malformed"|"too-large"|"http"|"exhausted"|"cancelled"} info.kind
+   * @param {"rate-limit"|"auth"|"network"|"origin-refused"|"malformed"|"too-large"|"http"|"exhausted"|"cancelled"|"stalled"} info.kind
    * @param {string} [info.providerId]
    * @param {number} [info.status] HTTP status when there was a response
    * @param {number} [info.retryAfterMs] from a Retry-After header

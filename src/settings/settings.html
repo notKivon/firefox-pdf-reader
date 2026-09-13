@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Settings — Scholar Reader</title>
+    <link rel="stylesheet" href="theme.css" />
+    <link rel="stylesheet" href="outline.css" />
+    <link rel="stylesheet" href="settings.css" />
+  </head>
+  <body class="settings">
+    <header id="toolbar">
+      <span id="doc-title">Scholar Reader — Settings</span>
+      <button id="theme-toggle" title="Toggle theme"></button>
+    </header>
+    <main class="settings-main">
+      <section id="keys" class="settings-section" aria-labelledby="keys-h">
+        <h2 id="keys-h">API keys</h2>
+        <p class="settings-hint">Stored only in this browser profile. Never sent anywhere except to the provider it belongs to.</p>
+        <div class="settings-body"></div>
+      </section>
+
+      <section id="providers" class="settings-section" aria-labelledby="providers-h">
+        <h2 id="providers-h">Providers</h2>
+        <p class="settings-hint">
+          The first is the default. If it runs out of quota, the next one with the same destination takes over. A
+          provider with a different destination — the local model included — is never used automatically.
+        </p>
+        <div class="settings-body"></div>
+      </section>
+
+      <section id="hosts" class="settings-section" aria-labelledby="hosts-h">
+        <h2 id="hosts-h">Sites that keep the browser's own viewer</h2>
+        <p class="settings-hint">One host per line, e.g. <code>example.org</code>. PDFs from these hosts are not intercepted.</p>
+        <div class="settings-body"></div>
+      </section>
+
+      <section id="consents" class="settings-section" aria-labelledby="consents-h">
+        <h2 id="consents-h">Documents approved for sending</h2>
+        <p class="settings-hint">
+          Revoking an approval makes the next outline request for that paper ask again. Outlines already cached still
+          open without asking, since opening them sends nothing.
+        </p>
+        <div class="settings-body"></div>
+      </section>
+    </main>
+    <script src="settings.js"></script>
+  </body>
+</html>

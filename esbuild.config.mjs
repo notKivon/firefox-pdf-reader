@@ -16,6 +16,8 @@ const STATIC = [
   ["src/viewer/controls.css", "controls.css"],
   ["src/viewer/debug.css", "debug.css"],
   ["src/viewer/outline.css", "outline.css"],
+  ["src/settings/settings.html", "settings.html"],
+  ["src/settings/settings.css", "settings.css"],
   // pdf.js ships its viewer CSS and the images that CSS references side by
   // side; the relative url(images/...) only resolves if both land flat.
   [pdfjs("web/pdf_viewer.css"), "pdf_viewer.css"],
@@ -51,6 +53,7 @@ const options = {
   entryPoints: {
     background: "src/background/index.js",
     viewer: "src/viewer/viewer.js",
+    settings: "src/settings/settings.js",
   },
   outdir: out,
   bundle: true,

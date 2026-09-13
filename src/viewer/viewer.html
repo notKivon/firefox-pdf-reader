@@ -26,6 +26,23 @@
           <input id="page-input" class="toolbar-field" type="text" inputmode="numeric" value="&ndash;" aria-label="Page number" title="Go to page" autocomplete="off" spellcheck="false" />
           <span id="page-total">/ &ndash;</span>
         </span>
+        <span class="toolbar-sep" aria-hidden="true"></span>
+        <button id="open-local" title="Open a PDF from this computer" aria-label="Open a PDF from this computer">
+          <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true" focusable="false" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M1.5 4.5v8a1 1 0 0 0 1 1h11a1 1 0 0 0 1-1V6a1 1 0 0 0-1-1H8L6.5 3h-4a1 1 0 0 0-1 1.5Z" />
+          </svg>
+        </button>
+        <button id="native-viewer" title="Open this PDF in the browser's own viewer" aria-label="Open this PDF in the browser's own viewer" hidden>
+          <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true" focusable="false" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M9.5 2.5h4v4M13.5 2.5 7.5 8.5M11.5 9.5v3a1 1 0 0 1-1 1h-7a1 1 0 0 1-1-1v-7a1 1 0 0 1 1-1h3" />
+          </svg>
+        </button>
+        <button id="open-settings" title="Settings" aria-label="Settings">
+          <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true" focusable="false" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M2.5 4h6M11.5 4h2M2.5 8h2M7.5 8h6M2.5 12h7M12.5 12h1" />
+            <path d="M10 2.6v2.8M6 6.6v2.8M11 10.6v2.8" />
+          </svg>
+        </button>
         <button id="theme-toggle" title="Toggle theme"></button>
       </div>
     </header>
@@ -36,7 +53,9 @@
         <div id="pdf-status">
           <span class="status-title">Loading…</span>
           <span class="status-detail"></span>
+          <button id="status-open-local" class="confirm-go" type="button" hidden>Choose a PDF…</button>
         </div>
+        <input id="local-file" type="file" accept="application/pdf,.pdf" hidden />
       </main>
       <div id="pane-resizer" role="separator" aria-orientation="vertical" aria-label="Resize outline pane" title="Drag to resize · double-click to reset" tabindex="0"></div>
       <aside id="outline-pane">

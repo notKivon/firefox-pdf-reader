@@ -2,8 +2,13 @@
 //
 // The trigger is the Content-Type header, never the URL extension: arXiv and
 // most publishers serve PDFs from extensionless URLs.
+import { normalizeHosts, OPT_OUT_KEY } from "../store/settings.js";
+
 const VIEWER_PAGE = "viewer.html";
-const OPT_OUT_KEY = "optOutHosts";
+
+// Normalised on read as well as on save, so a value written before the settings
+// page existed (or by hand) still compares by bare lower-case hostname.
+const hostSet = (stored) => new Set(normalizeHosts(stored ?? []).hosts);
 
 // Hosts the user has excluded. Replaced wholesale on storage change.
 let optOutHosts = new Set();
@@ -46,22 +51,30 @@ export function viewerUrlFor(originalUrl) {
   return `${base}?file=${encodeURIComponent(originalUrl)}`;
 }
 
+// Set at registration; null only when registered without an escape hatch.
+let bypass = null;
+
 function onHeadersReceived(details) {
   if (!shouldIntercept(details, optOutHosts)) return {};
+  // The reader asked for the browser's own viewer for this tab's next PDF.
+  if (bypass?.consume(details.tabId)) return {};
   return { redirectUrl: viewerUrlFor(details.url) };
 }
 
 function onStorageChanged(changes, area) {
   if (area !== "local" || !(OPT_OUT_KEY in changes)) return;
-  optOutHosts = new Set(changes[OPT_OUT_KEY].newValue ?? []);
+  optOutHosts = hostSet(changes[OPT_OUT_KEY].newValue);
 }
 
 /**
  * Registers the listener synchronously — an event page must have its blocking
  * listeners attached during the first turn or it can miss requests on wake-up.
  * The opt-out list loads right after; the set is empty for that one tick.
+ *
+ * @param {{bypass?: {consume(tabId: number): boolean}}} [deps]
  */
-export function registerInterceptor() {
+export function registerInterceptor(deps = {}) {
+  bypass = deps.bypass ?? null;
   browser.webRequest.onHeadersReceived.addListener(
     onHeadersReceived,
     { urls: ["http://*/*", "https://*/*"], types: ["main_frame"] },
@@ -72,7 +85,7 @@ export function registerInterceptor() {
   browser.storage.local
     .get(OPT_OUT_KEY)
     .then((stored) => {
-      optOutHosts = new Set(stored[OPT_OUT_KEY] ?? []);
+      optOutHosts = hostSet(stored[OPT_OUT_KEY]);
     })
     .catch((err) => {
       // Failing open means PDFs still render; an opt-out host is merely ignored.

@@ -80,3 +80,20 @@
   cursor: col-resize;
   user-select: none;
 }
+
+/* Between the reading controls and the ones that leave the page or open another
+   (a local file, the browser's own viewer, settings). */
+.toolbar-sep {
+  width: 1px;
+  height: 18px;
+  margin: 0 3px;
+  background: var(--border);
+}
+
+#toolbar button[hidden] {
+  display: none;
+}
+
+#status-open-local {
+  margin-top: 8px;
+}

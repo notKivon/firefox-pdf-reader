@@ -48,6 +48,10 @@ class FakeStore {
     return this.tx._run(() => void this.data.delete(key));
   }
 
+  getAll() {
+    return this.tx._run(() => [...this.data.values()].map((record) => structuredClone(record)));
+  }
+
   index(name) {
     return new FakeIndex(this, this.spec.indexes.get(name));
   }

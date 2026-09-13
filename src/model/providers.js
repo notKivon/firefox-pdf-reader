@@ -100,12 +100,17 @@ export function getProvider(id) {
  * another destination is never automatic — it needs its own send confirmation,
  * so the adapter stops rather than continuing past the end of this list.
  *
+ * The order is the reader's own from settings when the router has one. Whatever
+ * it holds, the destination filter is what keeps the local model out of every
+ * automatic path — no ordering can move it into a Google provider's chain.
+ *
  * @param {string} id key into PROVIDERS
+ * @param {string[]} [order] the configured order; FALLBACK_ORDER when absent
  * @returns {string[]} provider ids to try, in order, after `id` fails
  */
-export function fallbacksFor(id) {
+export function fallbacksFor(id, order = FALLBACK_ORDER) {
   const { destination } = getProvider(id);
-  const from = FALLBACK_ORDER.indexOf(id);
-  const rest = from === -1 ? FALLBACK_ORDER : FALLBACK_ORDER.slice(from + 1);
-  return rest.filter((other) => getProvider(other).destination === destination);
+  const from = order.indexOf(id);
+  const rest = from === -1 ? order : order.slice(from + 1);
+  return rest.filter((other) => other !== id && getProvider(other).destination === destination);
 }

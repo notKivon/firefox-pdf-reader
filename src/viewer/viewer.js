@@ -1,5 +1,5 @@
 // Viewer entry point: boots the PDF pane and wires the reading chrome.
-import { createPdfView, fetchPdf } from "./pdfview.js";
+import { createPdfView } from "./pdfview.js";
 import { initTheme } from "./theme.js";
 import { initPaneResize } from "./pane-resize.js";
 import { createToolbarFields } from "./toolbar-fields.js";
@@ -7,30 +7,38 @@ import { recordOpen, readingPosition, sha256Hex } from "../store/docs.js";
 import { charsPerPage, extractPages, modalFontName } from "../extract/textlayer.js";
 import { layoutDocument } from "../extract/columns.js";
 import { extractSections } from "../extract/sections.js";
+import { initActions } from "./actions.js";
 import { createDebugPane } from "./debug-pane.js";
 import { createOutlinePane } from "./outline-pane.js";
 import { trackReadingPosition } from "./reading-position.js";
 import { trackCurrentSection } from "./scroll-spy.js";
+import { fromFile, fromUrl, nameOf, nextPickedFile, requestedUrl } from "./source.js";
 
+const $ = (id) => document.getElementById(id);
 const els = {
-  container: document.getElementById("viewerContainer"),
-  viewer: document.getElementById("viewer"),
-  status: document.getElementById("pdf-status"),
+  container: $("viewerContainer"),
+  viewer: $("viewer"),
+  status: $("pdf-status"),
   statusTitle: document.querySelector("#pdf-status .status-title"),
   statusDetail: document.querySelector("#pdf-status .status-detail"),
-  note: document.getElementById("pane-note"),
-  outline: document.getElementById("outline-root"),
-  debug: document.getElementById("debug-pane"),
-  title: document.getElementById("doc-title"),
-  pageInput: document.getElementById("page-input"),
-  pageTotal: document.getElementById("page-total"),
-  zoomInput: document.getElementById("zoom-input"),
-  resizer: document.getElementById("pane-resizer"),
-  pane: document.getElementById("outline-pane"),
-  zoomIn: document.getElementById("zoom-in"),
-  zoomOut: document.getElementById("zoom-out"),
-  fitButton: document.getElementById("fit-width"),
-  theme: document.getElementById("theme-toggle"),
+  statusOpenLocal: $("status-open-local"),
+  localFile: $("local-file"),
+  note: $("pane-note"),
+  outline: $("outline-root"),
+  debug: $("debug-pane"),
+  title: $("doc-title"),
+  pageInput: $("page-input"),
+  pageTotal: $("page-total"),
+  zoomInput: $("zoom-input"),
+  resizer: $("pane-resizer"),
+  pane: $("outline-pane"),
+  zoomIn: $("zoom-in"),
+  zoomOut: $("zoom-out"),
+  fitButton: $("fit-width"),
+  theme: $("theme-toggle"),
+  openLocal: $("open-local"),
+  nativeViewer: $("native-viewer"),
+  settings: $("open-settings"),
 };
 
 function showStatus(title, detail = "", isError = false) {
@@ -40,25 +48,11 @@ function showStatus(title, detail = "", isError = false) {
   els.status.hidden = false;
 }
 
-function hideStatus() {
-  els.status.hidden = true;
-}
-
 // Non-fatal problems: the paper still reads, so they belong beside the outline
 // rather than over the page.
 function showNote(text) {
   els.note.textContent = text;
   els.note.hidden = false;
-}
-
-function documentName(url) {
-  try {
-    const { pathname, host } = new URL(url);
-    const last = pathname.split("/").filter(Boolean).pop();
-    return last ? decodeURIComponent(last) : host;
-  } catch {
-    return url;
-  }
 }
 
 function setDocumentTitle(name) {
@@ -69,10 +63,7 @@ function setDocumentTitle(name) {
 // Extraction is its own failure domain too: a paper that defeats the text layer
 // must still render and still scroll.
 async function runExtraction(view, pdfDoc) {
-  const pane = createDebugPane({
-    root: els.debug,
-    onJump: (target) => view.scrollToSection(target),
-  });
+  const pane = createDebugPane({ root: els.debug, onJump: (target) => view.scrollToSection(target) });
   try {
     const pages = await extractPages(pdfDoc, { onPage: (_, done, total) => pane.progress(done, total) });
     const sideways = pages.reduce((n, page) => n + page.droppedSideways, 0);
@@ -91,19 +82,48 @@ async function runExtraction(view, pdfDoc) {
   }
 }
 
+/**
+ * No `?file=`: an empty viewer, opened from the toolbar button. The picker is
+ * the way in, and a failed read offers it again rather than ending the page.
+ */
+async function pickLocal() {
+  els.statusOpenLocal.hidden = false;
+  for (;;) {
+    const file = await nextPickedFile(els.localFile, [els.statusOpenLocal, els.openLocal]);
+    showStatus("Loading…", file.name);
+    try {
+      return await fromFile(file);
+    } catch (err) {
+      showStatus("That file could not be opened", `${err.message} Choose another.`, true);
+    }
+  }
+}
+
+function offerAnotherFile() {
+  const again = () => window.location.reload();
+  els.statusOpenLocal.textContent = "Choose another PDF…";
+  els.statusOpenLocal.hidden = false;
+  els.statusOpenLocal.addEventListener("click", again);
+  els.openLocal.addEventListener("click", again);
+}
+
 async function main() {
   // Both before the paper loads: a pane width applied afterwards would re-fit
   // every page and move the reading position just restored.
   await Promise.all([initTheme(els.theme), initPaneResize({ handle: els.resizer, pane: els.pane })]);
+  const actions = initActions({ ...els, onNote: showNote });
 
-  const file = new URLSearchParams(window.location.search).get("file");
-  if (!file) {
-    showStatus("No PDF requested", "Open a PDF link and Scholar Reader takes over from there.");
-    return;
+  const url = requestedUrl();
+  let source;
+  if (url) {
+    setDocumentTitle(nameOf(url));
+    showStatus("Loading…", nameOf(url));
+  } else {
+    showStatus(
+      "Open a PDF",
+      "PDF links open here on their own. For a file on this computer, choose it below — Firefox does not let extensions open file:// PDFs directly.",
+    );
   }
-
-  setDocumentTitle(documentName(file));
-  showStatus("Loading…", documentName(file));
 
   // pdf.js reports page and scale only after load, by which time `fields` exists.
   const view = createPdfView({
@@ -120,17 +140,23 @@ async function main() {
   let doc;
   let hash;
   try {
-    const bytes = await fetchPdf(file);
+    source = url ? await fromUrl(url) : await pickLocal();
+    setDocumentTitle(source.name);
     // Hashed before loading: pdf.js may transfer the buffer to its worker and
     // leave it detached.
-    hash = await sha256Hex(bytes);
-    doc = await view.load(bytes);
-    hideStatus();
+    hash = await sha256Hex(source.bytes);
+    doc = await view.load(source.bytes);
+    els.status.hidden = true;
   } catch (err) {
     console.error("[scholar-reader] load failed", err);
     showStatus("This PDF could not be opened", err.message, true);
+    // The browser's own viewer may manage what this one could not; a picked
+    // file it rejects gets the picker again, on a clean page.
+    if (url) actions.setSource({ url, local: false });
+    else offerAnotherFile();
     return;
   }
+  actions.setSource(source);
 
   // The two halves of section jumping, and each needs the other: the pane sends
   // the reader to a place in the paper, and where the reader is sends the pane
@@ -157,10 +183,9 @@ async function main() {
 
   // Identity and history are a separate failure domain from rendering: a broken
   // IndexedDB must not cost the reader the paper.
-  let meta = { title: documentName(file), pageCount: doc.numPages };
+  let meta = { title: source.name, pageCount: doc.numPages };
   try {
-    const record = await recordOpen({ hash, url: file, pdfDoc: doc });
-    console.info(`[scholar-reader] document ${hash} — ${record.urls.length} url(s) on record`);
+    const record = await recordOpen({ hash, url: source.url, pdfDoc: doc });
     setDocumentTitle(record.title);
     meta = { title: record.title, pageCount: record.pageCount };
     trackReadingPosition({ view, hash, container: els.container, position: readingPosition(record), onNote: showNote });

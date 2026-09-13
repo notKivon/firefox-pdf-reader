@@ -6,116 +6,25 @@
 // confirmation gate is enforced here, so a viewer that forgets to ask cannot
 // cause a send.
 import { outline as generateOutline } from "../model/adapter.js";
-import { estimateCost, estimateTokens, totalChars } from "../model/estimate.js";
 import { ProviderError } from "../model/errors.js";
-import { DEFAULT_PROVIDER_ID, getProvider, PROVIDERS } from "../model/providers.js";
+import { getProvider, PROVIDERS } from "../model/providers.js";
 import { getApiKey } from "../store/apikeys.js";
-import { cacheKey } from "../store/cache-key.js";
 import { isConsented } from "../store/consent.js";
-import { cachedOutline, isCacheable, saveOutline } from "../store/outlines.js";
+import { isCacheable, saveOutline } from "../store/outlines.js";
 import { status as quotaStatus } from "../store/quota.js";
+import { plan } from "./plan.js";
+import { createWatchdog } from "./watchdog.js";
+
+export { plan };
 
 const PROGRESS_MESSAGE = "outline-progress";
 
 /**
- * What the confirm card renders and what the gate is checked against. Makes no
- * network request of any kind — that is the point of it being a separate
- * message: the viewer can find out what WOULD be sent, and where, without
- * anything being sent.
- *
- * @param {{hash: string, sections: object[], meta?: object, providerId?: string}} request
- */
-export async function plan({ hash, sections, meta = {}, providerId = DEFAULT_PROVIDER_ID }) {
-  const provider = getProvider(providerId);
-  const sendable = sections.filter((section) => section.text.trim().length > 0);
-  const chars = totalChars(sendable);
-  const estTokens = estimateTokens(chars);
-  const requests = provider.strategy === "whole-document" ? 1 : sendable.length + 1;
-  const key = cacheKey(hash, providerId);
-  // Read before anything else is decided: a hit means nothing is sent, so there
-  // is nothing to confirm and no counter to move (CLAUDE.md).
-  const cached = await cachedOrNull(hash, providerId);
-
-  return {
-    cacheKey: key,
-    hash,
-    title: meta.title ?? "",
-    pageCount: meta.pageCount ?? 0,
-    providerId,
-    model: provider.model,
-    destination: provider.destination,
-    label: provider.label,
-    host: hostOf(provider.baseUrl),
-    strategy: provider.strategy,
-    sectionCount: sendable.length,
-    sectionTitles: sendable.map((section) => section.title),
-    chars,
-    estTokens,
-    estCost: estimateCost(providerId, estTokens, requests),
-    requests,
-    hasKey: (await getApiKey(provider.keyRef)) !== null,
-    // The reader may deliberately choose another destination; nothing ever
-    // reaches one automatically (CLAUDE.md), so the card offers them by name.
-    alternatives: alternativesTo(provider.destination),
-    // Every other model, same destination included — what the finished outline
-    // offers, where "read this through a different model" is an ordinary want
-    // and is not limited to the crossing the card has to ask about.
-    otherProviders: othersThan(providerId),
-    consented: await consentedOrFalse(key),
-    cacheHit: cached !== null,
-    outline: cached ?? undefined,
-  };
-}
-
-function hostOf(baseUrl) {
-  try {
-    return new URL(baseUrl).host;
-  } catch {
-    return baseUrl;
-  }
-}
-
-function othersThan(providerId) {
-  return Object.entries(PROVIDERS)
-    .filter(([id]) => id !== providerId)
-    .map(([id, p]) => ({ id, label: p.label, destination: p.destination }));
-}
-
-function alternativesTo(destination) {
-  return Object.entries(PROVIDERS)
-    .filter(([, p]) => p.destination !== destination)
-    .map(([id, p]) => ({ id, label: p.label, destination: p.destination }));
-}
-
-// An unreadable cache is a miss, not a failure: the worst it costs is a request
-// that need not have been made, and the alternative — failing the open — costs
-// the reader the paper.
-async function cachedOrNull(hash, providerId) {
-  try {
-    return await cachedOutline(hash, providerId);
-  } catch (err) {
-    console.warn("[scholar-reader] outline cache unreadable", err);
-    return null;
-  }
-}
-
-// An unreadable store must read as "not consented" — never as consented. The
-// card then renders and the real gate below, which does not swallow, is what
-// reports the store failure if the reader goes ahead.
-async function consentedOrFalse(key) {
-  try {
-    return await isConsented(key);
-  } catch (err) {
-    console.warn("[scholar-reader] consent record unreadable", err);
-    return false;
-  }
-}
-
-/**
  * @param {{hash, sections, meta, providerId}} request
  * @param {number|undefined} tabId the tab to stream progress to
+ * @param {{watchdog?: object}} [options] injectable for tests
  */
-export async function runOutline(request, tabId) {
+export async function runOutline(request, tabId, { watchdog } = {}) {
   const detail = await plan(request);
   // Zero network requests on a hit — a correctness requirement rather than an
   // optimisation, and the reason this check sits ahead of the consent gate:
@@ -130,31 +39,52 @@ export async function runOutline(request, tabId) {
     return { error: "consent-required", plan: detail };
   }
 
-  const onProgress = tabId === undefined ? undefined : (partial) => {
-    browser.tabs
-      .sendMessage(tabId, { type: PROGRESS_MESSAGE, hash: request.hash, ...partial })
-      .catch(() => {
-        // The viewer navigated away mid-run. The result still completes and is
-        // still cached; there is simply no one to show it to.
-      });
+  const tell = (payload) => {
+    if (tabId === undefined) return;
+    browser.tabs.sendMessage(tabId, { type: PROGRESS_MESSAGE, hash: request.hash, ...payload }).catch(() => {
+      // The viewer navigated away mid-run. The result still completes and is
+      // still cached; there is simply no one to show it to.
+    });
   };
 
-  const result = await generateOutline({
-    sections: request.sections,
-    providerId: detail.providerId,
-    meta: request.meta,
-    resolveKey: getApiKey,
-    onProgress,
-    onProviderChange: (id) => {
-      if (tabId !== undefined) {
-        browser.tabs
-          .sendMessage(tabId, { type: PROGRESS_MESSAGE, hash: request.hash, providerId: id })
-          .catch(() => {});
-      }
-    },
-  });
+  const dog = watchdog ?? createWatchdog();
+  let result;
+  try {
+    result = await generateOutline({
+      sections: request.sections,
+      providerId: detail.providerId,
+      meta: request.meta,
+      order: detail.order,
+      resolveKey: getApiKey,
+      signal: dog.signal,
+      onProgress: (partial) => {
+        dog.poke();
+        tell(partial);
+      },
+      onProviderChange: (id) => {
+        dog.poke();
+        tell({ providerId: id });
+      },
+    });
+  } catch (err) {
+    if (dog.fired) throw stalled(detail, dog.ms, err);
+    throw err;
+  } finally {
+    dog.stop();
+  }
 
   return { ...result, ...(await cache(request.hash, result)) };
+}
+
+function stalled(detail, ms, cause) {
+  const minutes = Math.round(ms / 60_000);
+  const label = getProvider(detail.providerId).label;
+  const hint = detail.destination === "local" ? " If Ollama is still loading the model, trying again usually works." : "";
+  return new ProviderError(
+    `${label} stopped responding — nothing arrived for ${minutes} minute${minutes === 1 ? "" : "s"}, ` +
+      `so the request was abandoned and nothing was cached.${hint}`,
+    { kind: "stalled", providerId: detail.providerId, cause },
+  );
 }
 
 /**
@@ -178,18 +108,29 @@ async function cache(hash, result) {
   }
 }
 
-const HANDLERS = {
-  plan: (message) => plan(message),
-  outline: (message, sender) => runOutline(message, sender.tab?.id),
-  // Read-only: what today's counters stand at, for the settings page.
-  quota: async () => ({
-    providers: await Promise.all(
-      Object.keys(PROVIDERS)
-        .filter((id) => PROVIDERS[id].limits?.rpd)
-        .map((id) => quotaStatus(id)),
-    ),
-  }),
-};
+/** @param {{bypass: {grant(tabId: number): boolean}}} deps */
+function handlers({ bypass }) {
+  return {
+    plan: (message) => plan(message),
+    outline: (message, sender) => runOutline(message, sender.tab?.id),
+    // Read-only: what today's counters stand at, for the settings page.
+    quota: async () => ({
+      providers: await Promise.all(
+        Object.keys(PROVIDERS)
+          .filter((id) => PROVIDERS[id].limits?.rpd)
+          .map((id) => quotaStatus(id)),
+      ),
+    }),
+    // The escape hatch: the sending tab's next PDF opens in the browser's own
+    // viewer. Only a tab may ask, and only for itself.
+    bypass: async (_message, sender) => {
+      if (!bypass.grant(sender.tab?.id)) {
+        return { error: "internal", message: "Only a Scholar Reader tab can ask for the browser's own viewer." };
+      }
+      return { ok: true };
+    },
+  };
+}
 
 /**
  * Firefox resolves a promise returned from an onMessage listener, so every
@@ -197,9 +138,10 @@ const HANDLERS = {
  * not survive the structured clone, and CLAUDE.md requires every async boundary
  * to surface in the UI rather than hang.
  */
-export function registerRouter() {
+export function registerRouter(deps) {
+  const table = handlers(deps);
   browser.runtime.onMessage.addListener((message, sender) => {
-    const handler = HANDLERS[message?.type];
+    const handler = table[message?.type];
     if (!handler) return undefined;
     return handler(message, sender).catch((err) => {
       console.error(`[scholar-reader] ${message.type} failed`, err);

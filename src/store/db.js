@@ -104,6 +104,11 @@ export async function del(storeName, key) {
   await txDone(tx);
 }
 
+export async function getAll(storeName) {
+  const db = await openDb();
+  return requestDone(db.transaction(storeName, "readonly").objectStore(storeName).getAll());
+}
+
 export async function getAllByIndex(storeName, indexName, value) {
   const db = await openDb();
   const index = db.transaction(storeName, "readonly").objectStore(storeName).index(indexName);

@@ -10,7 +10,7 @@
 //
 // This module only reads and writes. The gate itself is `background/router.js`,
 // which is the only place a provider call can originate.
-import { CONSENTS, del, get, getAllByIndex, put } from "./db.js";
+import { CONSENTS, del, get, getAll, getAllByIndex, put } from "./db.js";
 
 /**
  * @param {string} key the cache key the send would use
@@ -43,6 +43,11 @@ export function consentsFor(hash) {
   return getAllByIndex(CONSENTS, "hash", hash);
 }
 
+/** Every grant on record, for the settings page's list. */
+export function allConsents() {
+  return getAll(CONSENTS);
+}
+
 export function revokeConsent(key) {
   return del(CONSENTS, key);
 }
@@ -50,6 +55,13 @@ export function revokeConsent(key) {
 /** Revoking a document revokes all of it: the settings page offers one control. */
 export async function revokeDocument(hash) {
   const records = await consentsFor(hash);
+  for (const record of records) await revokeConsent(record.key);
+  return records.length;
+}
+
+/** Every grant for every document. Returns how many were removed. */
+export async function revokeAll() {
+  const records = await allConsents();
   for (const record of records) await revokeConsent(record.key);
   return records.length;
 }

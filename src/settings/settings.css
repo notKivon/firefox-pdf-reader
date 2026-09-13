@@ -1,0 +1,107 @@
+/* The settings page reuses theme.css's tokens and toolbar; only the layout of a
+   scrolling page of forms is its own. */
+body.settings {
+  overflow: auto;
+}
+
+.settings-main {
+  max-width: 720px;
+  width: 100%;
+  margin: 0 auto;
+  padding: 16px 20px 48px;
+  box-sizing: border-box;
+}
+
+.settings-section {
+  padding: 16px 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.settings-section h2 {
+  margin: 0 0 4px;
+  font-size: 15px;
+}
+
+.settings-hint {
+  margin: 0 0 12px;
+  color: var(--text-dim);
+}
+
+.settings-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin: 6px 0;
+}
+
+.settings-row > .grow {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.settings input[type="password"],
+.settings textarea {
+  padding: 6px 8px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg-sunken);
+  color: var(--text);
+  font: inherit;
+}
+
+.settings textarea {
+  width: 100%;
+  min-height: 90px;
+  box-sizing: border-box;
+  font-family: ui-monospace, "SF Mono", Menlo, monospace;
+}
+
+.settings button.plain {
+  padding: 5px 10px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg-raised);
+  color: var(--text);
+  font: inherit;
+  cursor: pointer;
+}
+
+.settings button.plain:disabled {
+  color: var(--text-dim);
+  cursor: default;
+}
+
+.settings-dim {
+  color: var(--text-dim);
+}
+
+.settings-status {
+  min-height: 1.5em;
+  margin: 6px 0 0;
+  color: var(--text-dim);
+}
+
+.settings-status.error {
+  color: var(--danger);
+}
+
+.settings-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.settings-list > li {
+  padding: 8px 10px;
+  margin: 6px 0;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg-raised);
+}
+
+.settings-list ul {
+  margin: 4px 0 0;
+  padding-left: 18px;
+  color: var(--text-dim);
+}

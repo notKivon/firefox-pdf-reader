@@ -25,9 +25,10 @@ const CONCURRENCY = 3;
  * @param {(providerId: string) => void} [args.onProviderChange] fired when
  *   fallback moves the run to another provider of the same destination
  * @param {AbortSignal} [args.signal]
+ * @param {string[]} [args.order] the reader's provider order, for fallback
  * @returns {Promise<{sections, tldr, providerId, model, strategy, usage}>}
  */
-export async function outline({ sections, providerId, resolveKey, meta, onProgress, onProviderChange, signal }) {
+export async function outline({ sections, providerId, resolveKey, meta, onProgress, onProviderChange, signal, order }) {
   // CLAUDE.md keeps empty-text sections (a parent heading whose first subsection
   // follows immediately) because they carry the paper's structure. They cannot
   // be summarised and are never sent; they come back bullet-less, in place.
@@ -39,7 +40,7 @@ export async function outline({ sections, providerId, resolveKey, meta, onProgre
     });
   }
 
-  const chain = [providerId, ...fallbacksFor(providerId)];
+  const chain = [providerId, ...fallbacksFor(providerId, order)];
   const tried = [];
   let lastError;
 

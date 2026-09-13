@@ -6,7 +6,7 @@
 // document: a different provider, model, chunking strategy or prompt version
 // produces a different artifact, and an outline written by an older prompt is
 // never served as the current one.
-import { OUTLINES, del, get, getAllByIndex, put } from "./db.js";
+import { OUTLINES, del, get, getAll, getAllByIndex, put } from "./db.js";
 import { cacheKey } from "./cache-key.js";
 
 /**
@@ -61,4 +61,20 @@ export function outlinesFor(hash) {
 
 export function deleteOutline(key) {
   return del(OUTLINES, key);
+}
+
+/** Every cached outline on record, for the settings page's list. */
+export function allOutlines() {
+  return getAll(OUTLINES);
+}
+
+/**
+ * Forgets every cached outline for one document, so its next open plans afresh.
+ * Consent is a separate record and is untouched: a paper still approved sends
+ * again without asking, which is what that approval said.
+ */
+export async function forgetOutlines(hash) {
+  const records = await outlinesFor(hash);
+  for (const record of records) await deleteOutline(record.key);
+  return records.length;
 }

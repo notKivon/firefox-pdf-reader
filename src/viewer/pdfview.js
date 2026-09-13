@@ -13,22 +13,6 @@ const ZOOM_STEPS = [0.5, 0.67, 0.8, 0.9, 1, 1.1, 1.25, 1.5, 1.75, 2, 2.5, 3];
 // Air above a heading a jump lands on, in PDF points (~0.4in at 100%).
 const SCROLL_TOP_MARGIN = 30;
 
-export async function fetchPdf(url) {
-  const host = new URL(url).host;
-  let response;
-  try {
-    // Extension pages inherit host_permissions, so this cross-origin fetch is
-    // not subject to CORS. Cookies go along for paywalled publisher PDFs.
-    response = await fetch(url, { credentials: "include" });
-  } catch (cause) {
-    throw new Error(`Could not reach ${host}. The PDF was not downloaded.`, { cause });
-  }
-  if (!response.ok) {
-    throw new Error(`${host} returned HTTP ${response.status} for this PDF.`);
-  }
-  return new Uint8Array(await response.arrayBuffer());
-}
-
 export function createPdfView({ container, viewerEl, onPageChange, onScaleChange }) {
   const eventBus = new EventBus();
   const linkService = new PDFLinkService({ eventBus });

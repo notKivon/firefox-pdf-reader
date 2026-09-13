@@ -10,9 +10,14 @@ src/
     index.js         entry: wires interceptor + message router
     intercept.js     webRequest.onHeadersReceived → redirect to viewer
     router.js        runtime.onMessage handler; the ONLY place provider calls happen
+    plan.js          the `plan` message: what would be sent, and where, without sending
+    bypass.js        single-use per-tab pass for the escape hatch to the browser's own viewer
+    watchdog.js      abandons a run with no progress for STALL_MS as a `stalled` error
   viewer/
     viewer.html      two-pane shell
     viewer.js        entry: boots PDFViewer, wires panes
+    source.js        where the PDF comes from: interceptor URL or a picked local file
+    actions.js       toolbar: settings, browser's own viewer, open local file
     pdfview.js       pdfjs-dist PDFViewer setup, scrollToSection(), theme
     outline-pane.js  renders sections/bullets, click-to-jump, scroll-spy
     locate.js        which lines of a section a bullet restates (no model involved)
@@ -40,9 +45,11 @@ src/
     outlines.js      outline cache, cache key construction
     consent.js       per-cache-key send consent records
     quota.js         per-provider request counters keyed by Pacific date
+    apikeys.js       provider keys in storage.local, read only by the background
+    settings.js      provider order and origin opt-out list, normalised
   settings/
-    settings.html    key entry, provider selection, origin opt-out
-    settings.js
+    settings.html    key entry, provider order, origin opt-out, consent revocation
+    settings.js      entry; one *-section.js per section, model.js for the testable logic
 fixtures/            saved extracted-section JSON for prompt iteration
 tools/
   check-secrets.mjs  greps dist/ for key prefixes
