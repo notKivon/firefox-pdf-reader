@@ -16,6 +16,10 @@ const PLAN = {
   destination: "google", host: "generativelanguage.googleapis.com", estCost: 0.01,
   hasKey: false, consented: false, cacheHit: false,
   alternatives: [{ id: "ollama", label: "Gemma 4 E4B (local)", destination: "local" }],
+  otherProviders: [
+    { id: "gemini-dev", label: "Gemini 3.5 Flash-Lite (development)", destination: "google" },
+    { id: "ollama", label: "Gemma 4 E4B (local)", destination: "local" },
+  ],
 };
 
 const LOCAL_PLAN = {
@@ -181,6 +185,58 @@ await test("progressive fill renders the sections that have landed, already clic
   // Nor may a message about a different document.
   pane.progress({ hash: "other", sections: [{ title: "X", page: 9, y: 1, bullets: ["Wrong paper."] }] });
   assert.equal(root.findAll("outline-bullet-go").length, 1);
+});
+
+// ---- asked for 2026-09-13: change model without starting the paper over
+await test("a finished outline offers every other model, and picking one re-plans", async () => {
+  const sent = stubBrowser((message) =>
+    message.type === "plan"
+      ? { ...PLAN, providerId: message.providerId ?? "gemini-prod", consented: true }
+      : { sections: [], tldr: "t", model: "gemini-3.8-flash" });
+  const root = new FakeNode("div");
+  const pane = createOutlinePane({ root, onJump() {}, onSections() {} });
+  pane.start({ hash: "abc", meta: {}, sections: [{ title: "1 Intro", page: 1, y: 700, text: "words here" }] });
+  await settle();
+
+  const options = root.findAll("outline-switch-go");
+  assert.equal(options.length, 2, "both other models, same destination included");
+  assert.ok(options.some((o) => o.textContent.includes("Gemma 4 E4B")), "the local one among them");
+  assert.ok(options.some((o) => o.textContent.includes("on this machine")), "and where it goes");
+
+  // Picking one is an ordinary re-plan: a different cache key, so it renders
+  // from that model's cache, sends under its grant, or asks — the plan decides.
+  const before = sent.length;
+  options.find((o) => o.textContent.includes("Gemma 4 E4B")).click();
+  await settle();
+  const replanned = sent.slice(before).find((m) => m.type === "plan");
+  assert.equal(replanned.providerId, "ollama");
+});
+
+await test("a section's body lines never reach the wire", async () => {
+  const sent = stubBrowser((message) =>
+    message.type === "plan"
+      ? { ...PLAN, consented: true }
+      : { sections: [], tldr: "t", model: "gemini-3.8-flash" });
+  const root = new FakeNode("div");
+  const pane = createOutlinePane({ root, onJump() {}, onSections() {} });
+  // Lines are carried so a bullet can be located against the paper; they are
+  // the same words as `text` and the model payload is built from `text`, so
+  // sending them would put the paper on the wire twice for nothing.
+  pane.start({
+    hash: "abc",
+    meta: {},
+    sections: [{ title: "1 Intro", page: 1, y: 700, text: "words here",
+      lines: [{ page: 1, y: 690, height: 9, str: "words here" }] }],
+  });
+  await settle();
+
+  assert.ok(sent.length >= 2, "planned and sent");
+  for (const message of sent) {
+    for (const section of message.sections ?? []) {
+      assert.equal(section.lines, undefined, `${message.type} carried body lines`);
+      assert.equal(section.text, "words here", "while the text the model needs is intact");
+    }
+  }
 });
 
 console.log(results.join("\n"));

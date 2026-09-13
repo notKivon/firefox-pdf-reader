@@ -27,6 +27,19 @@ const isReferences = (title) => {
   return text === "references" || text === "bibliography";
 };
 
+// What a section keeps of each of its body lines, so a bullet can be located
+// against the paper itself later (viewer/locate.js). Only position and text —
+// the runs, fonts and item boxes stay behind, because nothing downstream needs
+// them and this list travels with the section.
+//
+// It is NEVER sent to a model and never reaches the wire: `outline-pane.js`
+// strips it at the send boundary, and a test asserts that. The model payload is
+// `text` and nothing else.
+const lineRecords = (lines) =>
+  lines
+    .filter((line) => line.str.trim())
+    .map((line) => ({ page: line.page, y: line.pdfY, height: line.height, str: line.str }));
+
 /**
  * Sections run from one heading to the next. Extraction stops at the
  * References/Bibliography heading and everything from there on is discarded —
@@ -54,6 +67,7 @@ export function buildSections(headings, lines) {
       // PDF user space, for scrollPageIntoView.
       y: line.pdfY,
       text,
+      lines: lineRecords(body),
     });
     if (sections.length >= MAX_SECTIONS) break;
   }
@@ -80,5 +94,11 @@ export function chunkSections(lines) {
 
 function finishChunk(chunk) {
   const span = chunk.page === chunk.lastPage ? `Page ${chunk.page}` : `Pages ${chunk.page}–${chunk.lastPage}`;
-  return { title: span, page: chunk.page, y: chunk.y, text: joinLines(chunk.lines) };
+  return {
+    title: span,
+    page: chunk.page,
+    y: chunk.y,
+    text: joinLines(chunk.lines),
+    lines: lineRecords(chunk.lines),
+  };
 }

@@ -79,7 +79,12 @@ const INLINE_MATH = /\$([^$\n]{1,200})\$|\\\(([^\n]{1,200}?)\\\)/g;
  */
 export function normalizeModelText(str) {
   if (!str) return str;
-  let out = normalizeText(str);
+  // A LaTeX command whose name starts with b, f, n, r or t collides with a JSON
+  // string escape: a model writing `\beta` emits `"\beta"`, which parses to a
+  // BACKSPACE followed by "eta". Seen in a live Ollama run. The control
+  // character is invisible but real, and it travels into the pane and into
+  // anything the reader copies out of it.
+  let out = normalizeText(str).replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/g, "");
   // Repeated because the wrappers nest: `$\mathbf{z}$` needs both passes, and
   // `\text{\bf x}` needs two of the inner one. Bounded so a pathological
   // string cannot spin here.

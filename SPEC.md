@@ -15,6 +15,8 @@ src/
     viewer.js        entry: boots PDFViewer, wires panes
     pdfview.js       pdfjs-dist PDFViewer setup, scrollToSection(), theme
     outline-pane.js  renders sections/bullets, click-to-jump, scroll-spy
+    locate.js        which lines of a section a bullet restates (no model involved)
+    provider-switch.js  change model on a finished outline
     confirm-card.js  the send-confirmation state of the outline pane
     theme.css        :root dark tokens + [data-theme="light"] override
   extract/
@@ -69,6 +71,17 @@ The outline pane's first state for any document with no consent record. Implemen
 - `onConfirm` writes the consent record **before** sending, so a crash mid-request cannot lose the grant and re-ask.
 - Section titles are listed in a collapsed `<details>` — "what exactly gets sent" is the question the card exists to answer, and the titles are the honest short answer. The References cutoff has already run by this point, so what the list shows is what goes.
 - No auto-dismiss and no timeout: an unanswered card stays. The paper is readable in the left pane regardless, which is why blocking here is acceptable.
+
+## viewer/locate.js
+Implements CLAUDE.md's "a bullet jumps to the lines it restates". Given a bullet and its section's own extracted lines, returns `{page, y, yEnd, height}` or `null`.
+
+- Tokenises both, dropping function words and the vocabulary a summary is written in ("the section reports that…"), and keeping decimals whole so `28.4` stays one token — the most distinctive thing a results bullet carries.
+- Scores every window of 1–4 consecutive lines. A token is weighted `1 / (1 + log2(lines it appears on))`, so a word on one line nails that line and a word on half the section says nothing.
+- **A word the section does not contain at all is weighted too, against the match.** This is the difference between a matcher that works and one that does not: scoring only over the words that happen to be present gave 99% recall *and* placed three passages in four taken from entirely different papers, because one incidental shared word is a perfect score when it is the only word counted. With absent words counted, the same recall holds and foreign placement falls to 0.3%.
+- A match needs at least 2 distinct matched words and a score of 0.42 to be acted on; below that it returns `null` and the caller jumps to the heading, exactly as before the feature existed.
+- Nothing here is persisted. The span is recomputed from the live extraction each time the document opens, so a cached outline needs no migration and no bullet position is ever stored.
+
+`extract/assemble.js` attaches the lines each section needs for this as `section.lines` (`{page, y, height, str}`). **`viewer/outline-pane.js` strips that field at the send boundary** — the model payload is `text` and nothing else, and a test asserts no outbound message carries it.
 
 ## extract/columns.js
 - Input: text items with `transform` (pdf.js gives `[a,b,c,d,x,y]`), `width`, `height`, `fontName`.

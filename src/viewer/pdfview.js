@@ -116,7 +116,7 @@ export function createPdfView({ container, viewerEl, onPageChange, onScaleChange
   // +y is up, so leaving air above the heading means scrolling to a larger y.
   // Near the top of a page that overshoots into the one before, which is what
   // `allowNegativeOffset` is for and is the right thing to show.
-  function scrollToSection({ page, y }) {
+  function scrollToSection({ page, y, yEnd, height }) {
     if (!pdfDocument) return;
     const pageNumber = Math.min(Math.max(page ?? 1, 1), pdfViewer.pagesCount);
     pdfViewer.scrollPageIntoView({
@@ -126,7 +126,7 @@ export function createPdfView({ container, viewerEl, onPageChange, onScaleChange
     });
     // Landing somewhere down a dense page is otherwise indistinguishable from
     // not having moved at all.
-    flashAt(pdfViewer.getPageView(pageNumber - 1), y);
+    flashAt(pdfViewer.getPageView(pageNumber - 1), y, yEnd, height);
   }
 
   // Where a {page, y} target sits in the scroll container, for scroll-spy.

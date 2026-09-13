@@ -57,6 +57,10 @@ export async function plan({ hash, sections, meta = {}, providerId = DEFAULT_PRO
     // The reader may deliberately choose another destination; nothing ever
     // reaches one automatically (CLAUDE.md), so the card offers them by name.
     alternatives: alternativesTo(provider.destination),
+    // Every other model, same destination included — what the finished outline
+    // offers, where "read this through a different model" is an ordinary want
+    // and is not limited to the crossing the card has to ask about.
+    otherProviders: othersThan(providerId),
     consented: await consentedOrFalse(key),
     cacheHit: cached !== null,
     outline: cached ?? undefined,
@@ -69,6 +73,12 @@ function hostOf(baseUrl) {
   } catch {
     return baseUrl;
   }
+}
+
+function othersThan(providerId) {
+  return Object.entries(PROVIDERS)
+    .filter(([id]) => id !== providerId)
+    .map(([id, p]) => ({ id, label: p.label, destination: p.destination }));
 }
 
 function alternativesTo(destination) {

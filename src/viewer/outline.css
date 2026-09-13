@@ -256,3 +256,42 @@
   border-top: 1px solid var(--border);
   color: var(--text-dim);
 }
+
+/* --- Changing model on a finished outline (2026-09-13) --- */
+
+.outline-switch {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin: 10px 0 0;
+  padding: 10px 0 0;
+  border-top: 1px solid var(--border);
+  color: var(--text-dim);
+}
+
+.outline-switch-label {
+  flex: 1 0 100%;
+}
+
+.outline-switch-go {
+  padding: 4px 8px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg-sunken);
+  color: var(--text);
+  font: inherit;
+  cursor: pointer;
+}
+
+.outline-switch-go:hover {
+  border-color: var(--accent);
+}
+
+/* A bullet whose own sentences were found in the paper jumps to them rather
+   than to the heading above them. The marker is deliberately quiet: it is a
+   better jump, not a different kind of thing, and a bullet without it still
+   works exactly as it always did. */
+.outline-bullet-go.is-located::before {
+  color: var(--accent);
+}

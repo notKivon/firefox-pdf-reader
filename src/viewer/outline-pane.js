@@ -8,7 +8,15 @@ import { confirmCard } from "./confirm-card.js";
 import { el } from "./el.js";
 import { errorBox } from "./pane-error.js";
 import { outlineList } from "./outline-list.js";
+import { providerSwitch } from "./provider-switch.js";
 import { grantConsent } from "../store/consent.js";
+
+// Sections carry their body lines so a bullet can be located against the paper
+// (locate.js). Those lines never leave this page: the router builds the model
+// payload from `text`, and sending them would put the same words on the wire
+// twice for nothing. Stripped explicitly, at the one boundary, rather than by
+// convention — `outline-pane.test.mjs` asserts no outbound message carries them.
+const forSending = (sections) => sections.map(({ lines, ...rest }) => rest);
 
 /**
  * @param {object} args
@@ -44,7 +52,12 @@ export function createOutlinePane({ root, onJump, onSections }) {
   // actually answered. A cache hit says so too — it is the reader's evidence
   // that this open sent nothing anywhere.
   function showReady(result) {
-    const rendered = outlineList(result, { onJump });
+    const rendered = outlineList(result, {
+      onJump,
+      // Located from the live extraction every open, so a cached outline needs
+      // no migration and nothing about a bullet's position is ever stored.
+      linesFor: (index) => current?.sections?.[index]?.lines,
+    });
     const box = el("div", "outline-ready");
     box.append(rendered.node);
     if (result.model) {
@@ -56,6 +69,12 @@ export function createOutlinePane({ root, onJump, onSections }) {
     // Non-fatal: the outline is on screen either way, and the only consequence
     // is another run next time. Saying so beats silence.
     if (result.warning) box.append(el("p", "pane-note", result.warning));
+    // A finished outline is not the end of the reader's choices. Re-planning
+    // under another model is a different cache key, so it renders from that
+    // model's cache if it has one and asks for its own confirmation if not —
+    // crossing to the local model included.
+    const switcher = providerSwitch(current?.plan, (id) => replan(id).catch(reportFailure));
+    if (switcher) box.append(switcher);
     show(box);
     list = rendered;
     onSections?.(rendered.targets);
@@ -67,7 +86,7 @@ export function createOutlinePane({ root, onJump, onSections }) {
     const detail = await browser.runtime.sendMessage({
       type: "plan",
       hash: current.hash,
-      sections: current.sections,
+      sections: forSending(current.sections),
       meta: current.meta,
       providerId,
     });
@@ -77,6 +96,7 @@ export function createOutlinePane({ root, onJump, onSections }) {
     }
     // A cache hit renders with no confirmation — nothing leaves, so there is
     // nothing to confirm (CLAUDE.md), and no request is made to find out.
+    current = { ...current, plan: detail };
     if (detail.cacheHit) return showReady({ ...detail.outline, cacheHit: true });
     if (detail.consented) return send(detail);
     show(
@@ -113,7 +133,7 @@ export function createOutlinePane({ root, onJump, onSections }) {
     const result = await browser.runtime.sendMessage({
       type: "outline",
       hash: current.hash,
-      sections: current.sections,
+      sections: forSending(current.sections),
       meta: current.meta,
       providerId: detail.providerId,
     });

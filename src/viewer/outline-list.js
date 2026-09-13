@@ -6,6 +6,7 @@
 // extracted one; the model's echo is a checksum and never reaches the screen.
 import { el } from "./el.js";
 import { normalizeModelText, normalizeText } from "../extract/normalize.js";
+import { locateBullet } from "./locate.js";
 
 const targetOf = (section) => ({ page: section.page, y: section.y });
 
@@ -42,14 +43,20 @@ function jumpable(node, target, onJump) {
   return node;
 }
 
-function bulletList(section, onJump) {
+function bulletList(section, onJump, lines) {
   const list = el("ul", "outline-bullets");
   for (const bullet of section.bullets) {
     const item = el("li", "outline-bullet");
     // Normalised here as well as at extraction: this text is the model's, and a
     // model both echoes the paper's notation and writes LaTeX of its own.
     const go = el("div", "outline-bullet-go", normalizeModelText(bullet));
-    jumpable(go, targetOf(section), onJump);
+    // A bullet goes to the lines it restates when those can be found in the
+    // paper, and to its heading when they cannot. The location is computed
+    // here from the section's own text — never supplied by the model. See
+    // locate.js for why that distinction is the whole point.
+    const located = lines ? locateBullet(bullet, lines) : null;
+    if (located) go.classList.add("is-located");
+    jumpable(go, located ?? targetOf(section), onJump);
     item.append(go);
     list.append(item);
   }
@@ -65,7 +72,7 @@ function emptyBody(section, partial) {
   return el("p", "outline-section-empty", "No text of its own — the next heading follows immediately.");
 }
 
-function sectionBlock(section, onJump, partial) {
+function sectionBlock(section, onJump, partial, lines) {
   const block = el("section", "outline-section");
   const heading = el("div", "outline-title");
   heading.append(
@@ -74,16 +81,23 @@ function sectionBlock(section, onJump, partial) {
     el("span", "outline-title-text", normalizeText(section.title)),
   );
   jumpable(heading, targetOf(section), onJump);
-  block.append(heading, section.bullets?.length ? bulletList(section, onJump) : emptyBody(section, partial));
+  block.append(heading, section.bullets?.length ? bulletList(section, onJump, lines) : emptyBody(section, partial));
   return block;
 }
 
 /**
  * @param {{sections: object[], tldr?: string}} result an outline, whole or partial
- * @param {{onJump?: (target: {page, y}) => void, partial?: boolean}} options
+ * @param {object} options
+ * @param {(target: {page, y}) => void} [options.onJump]
+ * @param {boolean} [options.partial]
+ * @param {(index: number) => object[]|undefined} [options.linesFor] the
+ *   extracted body lines of the section at that index, for locating bullets.
+ *   Absent during progressive fill: under `per-section` the sections that have
+ *   landed are compacted, so an index there is not an index into the paper, and
+ *   a target derived from the wrong section is worse than the heading.
  * @returns {{node, targets: {page, y}[], setActive: (index: number) => void}}
  */
-export function outlineList(result, { onJump, partial = false } = {}) {
+export function outlineList(result, { onJump, partial = false, linesFor } = {}) {
   const node = el("div", "outline");
 
   if (result.tldr) {
@@ -92,8 +106,8 @@ export function outlineList(result, { onJump, partial = false } = {}) {
     node.append(box);
   }
 
-  const blocks = result.sections.map((section) => {
-    const block = sectionBlock(section, onJump, partial);
+  const blocks = result.sections.map((section, index) => {
+    const block = sectionBlock(section, onJump, partial, linesFor?.(index));
     node.append(block);
     return block;
   });
