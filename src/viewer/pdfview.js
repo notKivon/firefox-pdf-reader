@@ -167,6 +167,15 @@ export function createPdfView({ container, viewerEl, onPageChange, onScaleChange
     if (next) pdfViewer.currentScaleValue = String(next);
   }
 
+  // A typed page or zoom. Values arrive already validated by toolbar-fields.js.
+  function goToPage(n) {
+    if (pdfDocument) pdfViewer.currentPageNumber = Math.min(Math.max(n, 1), pdfViewer.pagesCount);
+  }
+
+  function zoomTo(scale) {
+    if (pdfDocument) pdfViewer.currentScaleValue = String(scale);
+  }
+
   function destroy() {
     resizeObserver.disconnect();
     pdfDocument?.destroy();
@@ -181,6 +190,8 @@ export function createPdfView({ container, viewerEl, onPageChange, onScaleChange
     scrollToSection,
     offsetOf,
     zoomBy,
+    zoomTo,
+    goToPage,
     destroy,
     eventBus,
     get document() {

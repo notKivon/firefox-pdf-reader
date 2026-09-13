@@ -1,6 +1,8 @@
 // Viewer entry point: boots the PDF pane and wires the reading chrome.
 import { createPdfView, fetchPdf } from "./pdfview.js";
 import { initTheme } from "./theme.js";
+import { initPaneResize } from "./pane-resize.js";
+import { createToolbarFields } from "./toolbar-fields.js";
 import { recordOpen, readingPosition, sha256Hex } from "../store/docs.js";
 import { charsPerPage, extractPages, modalFontName } from "../extract/textlayer.js";
 import { layoutDocument } from "../extract/columns.js";
@@ -20,8 +22,11 @@ const els = {
   outline: document.getElementById("outline-root"),
   debug: document.getElementById("debug-pane"),
   title: document.getElementById("doc-title"),
-  page: document.getElementById("page-indicator"),
-  zoom: document.getElementById("zoom-level"),
+  pageInput: document.getElementById("page-input"),
+  pageTotal: document.getElementById("page-total"),
+  zoomInput: document.getElementById("zoom-input"),
+  resizer: document.getElementById("pane-resizer"),
+  pane: document.getElementById("outline-pane"),
   zoomIn: document.getElementById("zoom-in"),
   zoomOut: document.getElementById("zoom-out"),
   theme: document.getElementById("theme-toggle"),
@@ -86,7 +91,9 @@ async function runExtraction(view, pdfDoc) {
 }
 
 async function main() {
-  await initTheme(els.theme);
+  // Both before the paper loads: a pane width applied afterwards would re-fit
+  // every page and move the reading position just restored.
+  await Promise.all([initTheme(els.theme), initPaneResize({ handle: els.resizer, pane: els.pane })]);
 
   const file = new URLSearchParams(window.location.search).get("file");
   if (!file) {
@@ -97,16 +104,14 @@ async function main() {
   setDocumentTitle(documentName(file));
   showStatus("Loading…", documentName(file));
 
+  // pdf.js reports page and scale only after load, by which time `fields` exists.
   const view = createPdfView({
     container: els.container,
     viewerEl: els.viewer,
-    onPageChange: (page, total) => {
-      els.page.textContent = `${page} / ${total}`;
-    },
-    onScaleChange: (scale) => {
-      els.zoom.textContent = `${Math.round(scale * 100)}%`;
-    },
+    onPageChange: (page, total) => fields.setPage(page, total),
+    onScaleChange: (scale) => fields.setScale(scale),
   });
+  const fields = createToolbarFields({ ...els, view });
 
   els.zoomIn.addEventListener("click", () => view.zoomBy(1));
   els.zoomOut.addEventListener("click", () => view.zoomBy(-1));

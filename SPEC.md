@@ -17,8 +17,11 @@ src/
     outline-pane.js  renders sections/bullets, click-to-jump, scroll-spy
     locate.js        which lines of a section a bullet restates (no model involved)
     provider-switch.js  change model on a finished outline
+    pane-resize.js   draggable edge between the panes, width in storage.local
+    toolbar-fields.js  typed page number and zoom percentage
     confirm-card.js  the send-confirmation state of the outline pane
     theme.css        :root dark tokens + [data-theme="light"] override
+    controls.css     toolbar fields and the pane resize handle
   extract/
     textlayer.js     getTextContent → positioned items
     columns.js       column clustering, reading-order sort

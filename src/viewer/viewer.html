@@ -6,6 +6,7 @@
     <title>Scholar Reader</title>
     <link rel="stylesheet" href="pdf_viewer.css" />
     <link rel="stylesheet" href="theme.css" />
+    <link rel="stylesheet" href="controls.css" />
     <link rel="stylesheet" href="debug.css" />
     <link rel="stylesheet" href="outline.css" />
   </head>
@@ -14,9 +15,12 @@
       <span id="doc-title">Scholar Reader</span>
       <div id="toolbar-controls">
         <button id="zoom-out" title="Zoom out">&minus;</button>
-        <span id="zoom-level">&ndash;</span>
+        <input id="zoom-input" class="toolbar-field" type="text" inputmode="decimal" value="&ndash;" aria-label="Zoom level" title="Zoom — type a percentage" autocomplete="off" spellcheck="false" />
         <button id="zoom-in" title="Zoom in">+</button>
-        <span id="page-indicator">&ndash;&thinsp;/&thinsp;&ndash;</span>
+        <span id="page-indicator">
+          <input id="page-input" class="toolbar-field" type="text" inputmode="numeric" value="&ndash;" aria-label="Page number" title="Go to page" autocomplete="off" spellcheck="false" />
+          <span id="page-total">/ &ndash;</span>
+        </span>
         <button id="theme-toggle" title="Toggle theme"></button>
       </div>
     </header>
@@ -29,6 +33,7 @@
           <span class="status-detail"></span>
         </div>
       </main>
+      <div id="pane-resizer" role="separator" aria-orientation="vertical" aria-label="Resize outline pane" title="Drag to resize · double-click to reset" tabindex="0"></div>
       <aside id="outline-pane">
         <p id="pane-note" class="pane-note" hidden></p>
         <div id="outline-root"></div>

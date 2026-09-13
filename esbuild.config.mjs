@@ -13,6 +13,7 @@ const STATIC = [
   ["manifest.json", "manifest.json"],
   ["src/viewer/viewer.html", "viewer.html"],
   ["src/viewer/theme.css", "theme.css"],
+  ["src/viewer/controls.css", "controls.css"],
   ["src/viewer/debug.css", "debug.css"],
   ["src/viewer/outline.css", "outline.css"],
   // pdf.js ships its viewer CSS and the images that CSS references side by

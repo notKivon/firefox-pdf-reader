@@ -1,0 +1,71 @@
+/* The reader's own controls over the layout: typed page and zoom values, and
+   the edge between the panes. Tokens come from theme.css. */
+
+/* Reads as a value until hovered or focused, then as the field it is. */
+.toolbar-field {
+  box-sizing: border-box;
+  height: 26px;
+  padding: 0 4px;
+  background: transparent;
+  color: var(--text-dim);
+  border: 1px solid transparent;
+  border-radius: 5px;
+  font: inherit;
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+}
+
+.toolbar-field:hover {
+  border-color: var(--border);
+}
+
+.toolbar-field:focus {
+  outline: none;
+  background: var(--bg-sunken);
+  color: var(--text);
+  border-color: var(--accent);
+}
+
+#zoom-input {
+  width: 56px;
+}
+
+#page-input {
+  width: 44px;
+}
+
+/* Straddles the outline pane's border without taking width of its own, so the
+   grab target is wider than the 1px line it moves. */
+#pane-resizer {
+  position: relative;
+  z-index: 2;
+  flex: 0 0 8px;
+  margin: 0 -4px;
+  cursor: col-resize;
+  touch-action: none;
+}
+
+#pane-resizer::after {
+  content: "";
+  position: absolute;
+  inset: 0 3px;
+  background: transparent;
+  transition: background 0.12s;
+}
+
+#pane-resizer:hover::after,
+#pane-resizer:focus-visible::after,
+.is-resizing #pane-resizer::after {
+  background: var(--accent);
+}
+
+#pane-resizer:focus {
+  outline: none;
+}
+
+/* Mid-drag the pointer crosses the paper's text layer and the outline's text;
+   neither should select, and the cursor should not flicker back to a caret. */
+.is-resizing {
+  cursor: col-resize;
+  user-select: none;
+}
