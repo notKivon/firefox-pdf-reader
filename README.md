@@ -58,6 +58,19 @@ the implementation in the next step.
 
 ---
 
+## From a fresh clone
+
+Built and verified this way on Node 22 / npm 10:
+
+```
+git clone https://github.com/notKivon/firefox-pdf-reader.git
+cd firefox-pdf-reader
+npm ci
+npm run build          # emits dist/ — the loadable extension
+npm test               # no network, no key, no browser needed
+npm run check:secrets
+```
+
 ## Loading into Zen
 
 Zen enforces Gecko's extension signature requirement and its
@@ -69,19 +82,32 @@ the extension is loaded temporarily and **is lost on every browser restart**.
 3. **Load Temporary Add-on…** → select `dist/manifest.json`
 4. Reload after each rebuild with the **Reload** button on the extension's card
 
+Then, once per profile:
+
+5. Open settings — the ⚙ in the viewer toolbar, or `about:addons` → Scholar Reader
+   → Preferences — and paste the Gemini API key. It is stored in
+   `browser.storage.local` for that profile. A browser restart removes a
+   temporary add-on, and that may clear its storage too: the key, the outline
+   cache and the send consents. This has not been tested. If settings shows no
+   key after a restart, enter it again.
+6. **Only for the local model:** Ollama checks the request's `Origin`. With the
+   macOS desktop app, run `launchctl setenv OLLAMA_ORIGINS "moz-extension://*"` and
+   restart Ollama. This does not survive a reboot. If Ollama was started from a
+   shell with `ollama serve`, export the variable in that shell instead.
+
 Permanent installation requires AMO *unlisted* signing — that's step 16, and it's
 only worth doing once the extension is stable, since each release needs another
 round trip.
 
 ## Commands
 
-These exist from step 1 onward.
-
 | | |
 |---|---|
 | `npm run build` | Bundle to `dist/` |
 | `npm run watch` | Rebuild on change |
-| `npm run check:secrets` | Fail if `dist/` contains an API key. Run before any packaging or signing step. |
+| `npm test` | Unit and integration tests in Node, against stubs — no network |
+| `npm run check:secrets` | Fail if `dist/` or any tracked file contains an API key. Run before any packaging or signing step. |
+| `npm run probe` | Send one fixture to a real provider and report outline quality — spends real quota; see PROGRESS.md |
 
 ## Secrets
 
@@ -90,11 +116,10 @@ settings page and live in `browser.storage.local`. See the secrets policy in
 `CLAUDE.md`.
 
 `.gitignore` covers the paths a key could plausibly reach: `dist/`, `.env`,
-`*.key`, `*.xpi`. `npm run check:secrets` greps the **built bundle**, which is
-the case that matters before packaging — but note it does not scan tracked
-sources, so a key pasted into a source file or a fixture would slip past it.
-On a public repo that is unrecoverable by deletion: a pushed key must be
-treated as burned and rotated at aistudio.google.com, not just removed.
-
-Worth tightening at step 14, when `settings.js` starts handling the key for
-real and a stray `console.log` becomes the likely slip.
+`*.key`, `*.xpi`. `npm run check:secrets` scans two things. It checks the
+**built bundle** for anything key-shaped, which is what matters before
+packaging. It also checks **every tracked file** for full-length keys, since
+the tests use short fake ones on purpose. It cannot see a key that was never
+`git add`ed, and it runs only when invoked. On a public repo, a pushed key
+cannot be fixed by deleting it: treat it as burned and rotate it at
+aistudio.google.com.
