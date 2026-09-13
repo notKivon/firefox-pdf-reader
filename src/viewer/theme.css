@@ -12,6 +12,8 @@
   --accent: #7aa2f7;
   --danger: #f7768e;
   --shadow: rgba(0, 0, 0, 0.45);
+  --page-edge: rgba(0, 0, 0, 0.6);
+  --page-gap: 16px;
 
   --toolbar-height: 40px;
   --outline-width: 360px;
@@ -29,6 +31,7 @@
   --accent: #2f5fd0;
   --danger: #c7304a;
   --shadow: rgba(16, 20, 30, 0.16);
+  --page-edge: rgba(16, 20, 30, 0.14);
 }
 
 html,
@@ -194,10 +197,22 @@ body {
   display: none;
 }
 
-/* pdf.js draws its own page shadow; reuse the theme's. */
+/* Pages sit apart, each with its own edge. pdf.js spaces pages with a 9px
+   transparent border and a -8px bottom margin that only works as a pair:
+   dropping the border alone left each page overlapping the next by 7px, so the
+   seam vanished. The gap is a real margin here instead, and the edge is a
+   shadow ring rather than a border, so pdf.js's offset arithmetic (which reads
+   clientTop) sees no border to account for. */
+.pdfViewer {
+  padding-top: var(--page-gap);
+}
+
 .pdfViewer .page {
-  --page-box-shadow: 0 2px 8px var(--shadow);
   border: none;
+  margin: 0 auto var(--page-gap);
+  box-shadow:
+    0 0 0 1px var(--page-edge),
+    0 3px 12px var(--shadow);
 }
 
 /* Where a jump landed. Arriving halfway down a dense page is otherwise
