@@ -1,6 +1,8 @@
 // The toolbar controls that lead out of the current reading: settings, the
 // browser's own viewer, and another PDF from this computer.
 //
+import { openSettingsFrom } from "../settings/back.js";
+
 // Each of them fails in words, beside the outline, rather than silently — the
 // paper is still on screen, so none of these is worth an error over the page.
 
@@ -12,8 +14,10 @@
  * @param {(text: string) => void} args.onNote
  */
 export function initActions({ settings, nativeViewer, openLocal, onNote }) {
+  // Not `runtime.openOptionsPage()`: settings needs to know which tab to return
+  // to, and that call cannot carry it.
   settings.addEventListener("click", () => {
-    browser.runtime.openOptionsPage().catch((err) => onNote(`Settings could not be opened: ${err.message}`));
+    openSettingsFrom().catch((err) => onNote(`Settings could not be opened: ${err.message}`));
   });
 
   let source = null;

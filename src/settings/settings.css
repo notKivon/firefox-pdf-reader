@@ -105,3 +105,16 @@ body.settings {
   padding-left: 18px;
   color: var(--text-dim);
 }
+
+.back-button {
+  gap: 5px;
+}
+
+.settings button.back-button.plain {
+  display: inline-flex;
+  align-items: center;
+}
+
+.settings-footer {
+  padding-top: 16px;
+}

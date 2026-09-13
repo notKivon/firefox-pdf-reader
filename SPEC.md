@@ -50,6 +50,7 @@ src/
   settings/
     settings.html    key entry, provider order, origin opt-out, consent revocation
     settings.js      entry; one *-section.js per section, model.js for the testable logic
+    back.js          opening settings from a reader tab, and Back to that tab
 fixtures/            saved extracted-section JSON for prompt iteration
 tools/
   check-secrets.mjs  greps dist/ for key prefixes

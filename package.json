@@ -8,7 +8,7 @@
     "build": "node esbuild.config.mjs",
     "watch": "node esbuild.config.mjs --watch",
     "check:secrets": "node tools/check-secrets.mjs",
-    "test": "node tools/test/normalize.test.mjs && node tools/test/lines.test.mjs && node tools/test/adapter.test.mjs && node tools/test/router.test.mjs && node tools/test/consent.test.mjs && node tools/test/quota.test.mjs && node tools/test/cache.test.mjs && node tools/test/ollama.test.mjs && node tools/test/confirm-card.test.mjs && node tools/test/outline-pane.test.mjs && node tools/test/outline-list.test.mjs && node tools/test/locate.test.mjs && node tools/test/scroll-spy.test.mjs && node tools/test/controls.test.mjs && node tools/test/hardening.test.mjs",
+    "test": "node tools/test/normalize.test.mjs && node tools/test/lines.test.mjs && node tools/test/adapter.test.mjs && node tools/test/router.test.mjs && node tools/test/consent.test.mjs && node tools/test/quota.test.mjs && node tools/test/cache.test.mjs && node tools/test/ollama.test.mjs && node tools/test/confirm-card.test.mjs && node tools/test/outline-pane.test.mjs && node tools/test/outline-list.test.mjs && node tools/test/locate.test.mjs && node tools/test/scroll-spy.test.mjs && node tools/test/controls.test.mjs && node tools/test/hardening.test.mjs && node tools/test/settings-nav.test.mjs",
     "probe": "node tools/live-probe.mjs"
   },
   "dependencies": {
