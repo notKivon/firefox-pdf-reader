@@ -5,3 +5,4 @@ dist/
 *.key
 .DS_Store
 .idea/
+web-ext-artifacts/

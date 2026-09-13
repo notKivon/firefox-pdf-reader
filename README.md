@@ -95,9 +95,37 @@ Then, once per profile:
    restart Ollama. This does not survive a reboot. If Ollama was started from a
    shell with `ollama serve`, export the variable in that shell instead.
 
-Permanent installation requires AMO *unlisted* signing — that's step 16, and it's
-only worth doing once the extension is stable, since each release needs another
-round trip.
+Permanent installation requires AMO *unlisted* signing. See below.
+
+## Signing a release (AMO, unlisted)
+
+1. Bump `version` in **both** `manifest.json` and `package.json`. AMO rejects a
+   version it has already signed. Commit.
+2. `npm run package`. This writes `web-ext-artifacts/scholar-reader-<version>.xpi`
+   and `scholar-reader-<version>-source.zip`. The second file is `git archive HEAD`.
+3. On <https://addons.mozilla.org/developers/addon/submit/distribution>, choose
+   **On your own**, which is unlisted, and upload the `.xpi`.
+4. When asked whether source code is needed, answer **Yes** and upload the
+   source zip, because `dist/` is bundled by esbuild. Paste the reviewer notes
+   below.
+5. Once it is signed, download the signed `.xpi` from the version's page. In Zen,
+   remove the temporary copy from `about:debugging` if it is loaded, then go to
+   `about:addons` → ⚙ → **Install Add-on From File…**.
+
+Reviewer notes:
+
+```
+Build: Node 22, npm 10. In the source archive: `npm ci && npm run build`.
+The extension is the resulting dist/ directory, which matches the uploaded XPI
+file for file. esbuild bundles without minifying. The only third-party runtime
+code is pdfjs-dist (see package-lock.json); its worker, cmaps, fonts and wasm
+are copied unmodified from node_modules/pdfjs-dist. The web-ext lint warnings
+all come from that pdf.js code.
+Data: the text of the open PDF is sent to Google's Gemini API (key supplied by
+the user) or to a local Ollama server only after the user confirms each
+document in the page. No data goes to the developer.
+```
+
 
 ## Commands
 
@@ -106,6 +134,7 @@ round trip.
 | `npm run build` | Bundle to `dist/` |
 | `npm run watch` | Rebuild on change |
 | `npm test` | Unit and integration tests in Node, against stubs — no network |
+| `npm run package` | Build, secrets gate, lint, then write the XPI and its source archive to `web-ext-artifacts/`. Refuses an uncommitted tree. |
 | `npm run check:secrets` | Fail if `dist/` or any tracked file contains an API key. Run before any packaging or signing step. |
 | `npm run probe` | Send one fixture to a real provider and report outline quality — spends real quota; see PROGRESS.md |
 
