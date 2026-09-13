@@ -108,7 +108,8 @@ Permanent installation requires AMO *unlisted* signing. See below.
 4. When asked whether source code is needed, answer **Yes** and upload the
    source zip, because `dist/` is bundled by esbuild. Paste the reviewer notes
    below.
-5. Once it is signed, download the signed `.xpi` from the version's page. In Zen,
+5. Once it is signed, download the signed `.xpi` from Developer Hub → the add-on →
+   **Manage Status & Versions** → the version. In Zen,
    remove the temporary copy from `about:debugging` if it is loaded, then go to
    `about:addons` → ⚙ → **Install Add-on From File…**.
 
