@@ -168,7 +168,7 @@ Request `unlimitedStorage` in the manifest.
 
 ## External service setup
 - **Google AI Studio** ✅ — key created by the user and held outside the repo; it is entered in extension settings at step 14. Tier 1 (paid). Real limits recorded in `model/providers.js`.
-- **Ollama** ⏸️ — user installs Ollama, pulls `gemma4:e4b`, and starts it with `OLLAMA_ORIGINS="moz-extension://*"`. Nothing is needed back except confirmation that `curl http://127.0.0.1:11434/api/tags` responds.
+- **Ollama** ✅ — installed 2026-09-13 as the macOS **desktop app** (Ollama 0.34.0), `gemma4:e4b` pulled. Because launchd starts it rather than a shell, `OLLAMA_ORIGINS` is set with `launchctl setenv OLLAMA_ORIGINS "moz-extension://*"` and the app restarted — not by exporting it in a terminal, which the app never sees. That setting does not survive a reboot.
 - **addons.mozilla.org** ⏸️ (post-v1) — user submits the built XPI for **unlisted** signing and downloads the signed file. Zen enforces Gecko's signature requirement and its `xpinstall.signatures.required` pref cannot be overridden, so unsigned permanent installation is impossible; `about:debugging` temporary loading is the development path and does not survive a restart.
 
 ## Verification per area
