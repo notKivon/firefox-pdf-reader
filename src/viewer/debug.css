@@ -2,6 +2,12 @@
    diagnostic chrome, and nothing else styles it. */
 /* --- Extraction debug panel (steps 5-6) --- */
 
+/* Room above the panel so its heading, especially once collapsed, reads as
+   separate from the outline rather than as the outline's last line. */
+.debug-panel {
+  padding-top: 24px;
+}
+
 .debug-heading {
   margin: 0 0 8px;
   cursor: pointer;
