@@ -12,6 +12,8 @@ import { DEFAULT_PROVIDER_ID, getProvider, PROVIDERS } from "../model/providers.
 import { getApiKey } from "../store/apikeys.js";
 import { cacheKey } from "../store/cache-key.js";
 import { isConsented } from "../store/consent.js";
+import { cachedOutline, isCacheable, saveOutline } from "../store/outlines.js";
+import { status as quotaStatus } from "../store/quota.js";
 
 const PROGRESS_MESSAGE = "outline-progress";
 
@@ -30,6 +32,9 @@ export async function plan({ hash, sections, meta = {}, providerId = DEFAULT_PRO
   const estTokens = estimateTokens(chars);
   const requests = provider.strategy === "whole-document" ? 1 : sendable.length + 1;
   const key = cacheKey(hash, providerId);
+  // Read before anything else is decided: a hit means nothing is sent, so there
+  // is nothing to confirm and no counter to move (CLAUDE.md).
+  const cached = await cachedOrNull(hash, providerId);
 
   return {
     cacheKey: key,
@@ -53,9 +58,8 @@ export async function plan({ hash, sections, meta = {}, providerId = DEFAULT_PRO
     // reaches one automatically (CLAUDE.md), so the card offers them by name.
     alternatives: alternativesTo(provider.destination),
     consented: await consentedOrFalse(key),
-    // Step 10's, along with the outline cache itself. "No" is the safe answer
-    // until then: it costs a confirmation, never a silent send.
-    cacheHit: false,
+    cacheHit: cached !== null,
+    outline: cached ?? undefined,
   };
 }
 
@@ -71,6 +75,18 @@ function alternativesTo(destination) {
   return Object.entries(PROVIDERS)
     .filter(([, p]) => p.destination !== destination)
     .map(([id, p]) => ({ id, label: p.label, destination: p.destination }));
+}
+
+// An unreadable cache is a miss, not a failure: the worst it costs is a request
+// that need not have been made, and the alternative — failing the open — costs
+// the reader the paper.
+async function cachedOrNull(hash, providerId) {
+  try {
+    return await cachedOutline(hash, providerId);
+  } catch (err) {
+    console.warn("[scholar-reader] outline cache unreadable", err);
+    return null;
+  }
 }
 
 // An unreadable store must read as "not consented" — never as consented. The
@@ -91,6 +107,11 @@ async function consentedOrFalse(key) {
  */
 export async function runOutline(request, tabId) {
   const detail = await plan(request);
+  // Zero network requests on a hit — a correctness requirement rather than an
+  // optimisation, and the reason this check sits ahead of the consent gate:
+  // there is no send to gate.
+  if (detail.cacheHit) return { ...detail.outline, cacheHit: true };
+
   // Deliberately re-read rather than trusting `detail.consented`: the gate is
   // the router's own read of the store, so nothing the viewer sends — a stubbed
   // check, a forged flag on the message — can stand in for a grant.
@@ -108,7 +129,7 @@ export async function runOutline(request, tabId) {
       });
   };
 
-  return generateOutline({
+  const result = await generateOutline({
     sections: request.sections,
     providerId: detail.providerId,
     meta: request.meta,
@@ -122,11 +143,42 @@ export async function runOutline(request, tabId) {
       }
     },
   });
+
+  return { ...result, ...(await cache(request.hash, result)) };
+}
+
+/**
+ * Caching is the last thing that happens and the only one allowed to fail
+ * quietly: the outline is already on screen, and a paper the reader can read is
+ * worth more than one they cannot because the write failed. The cost of the
+ * miss is one more request next time, which the note says out loud.
+ */
+async function cache(hash, result) {
+  // A run with malformed sections in it is a partial outline; caching it would
+  // make the gaps permanent, since the next open would be a hit.
+  if (!isCacheable(result)) {
+    return { warning: "Some sections could not be summarised, so this outline was not cached." };
+  }
+  try {
+    await saveOutline(hash, result);
+    return {};
+  } catch (err) {
+    console.warn("[scholar-reader] outline not cached", err);
+    return { warning: `This outline could not be cached, so reopening will generate it again: ${err.message}` };
+  }
 }
 
 const HANDLERS = {
   plan: (message) => plan(message),
   outline: (message, sender) => runOutline(message, sender.tab?.id),
+  // Read-only: what today's counters stand at, for the settings page.
+  quota: async () => ({
+    providers: await Promise.all(
+      Object.keys(PROVIDERS)
+        .filter((id) => PROVIDERS[id].limits?.rpd)
+        .map((id) => quotaStatus(id)),
+    ),
+  }),
 };
 
 /**

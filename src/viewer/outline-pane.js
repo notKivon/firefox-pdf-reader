@@ -41,12 +41,21 @@ export function createOutlinePane({ root, onJump, onSections }) {
 
   // The finished outline. It names `result.model` rather than the provider that
   // was asked: fallback may have moved the run, and the reader should see who
-  // actually answered.
+  // actually answered. A cache hit says so too — it is the reader's evidence
+  // that this open sent nothing anywhere.
   function showReady(result) {
     const rendered = outlineList(result, { onJump });
     const box = el("div", "outline-ready");
     box.append(rendered.node);
-    if (result.model) box.append(el("p", "outline-source", `Outlined by ${result.model}.`));
+    if (result.model) {
+      const source = result.cacheHit
+        ? `Outlined by ${result.model}, from this document's cache — nothing was sent.`
+        : `Outlined by ${result.model}.`;
+      box.append(el("p", "outline-source", source));
+    }
+    // Non-fatal: the outline is on screen either way, and the only consequence
+    // is another run next time. Saying so beats silence.
+    if (result.warning) box.append(el("p", "pane-note", result.warning));
     show(box);
     list = rendered;
     onSections?.(rendered.targets);
@@ -67,8 +76,8 @@ export function createOutlinePane({ root, onJump, onSections }) {
       return;
     }
     // A cache hit renders with no confirmation — nothing leaves, so there is
-    // nothing to confirm (step 10 supplies the hit itself).
-    if (detail.cacheHit) return showReady(detail.outline);
+    // nothing to confirm (CLAUDE.md), and no request is made to find out.
+    if (detail.cacheHit) return showReady({ ...detail.outline, cacheHit: true });
     if (detail.consented) return send(detail);
     show(
       confirmCard(detail, {

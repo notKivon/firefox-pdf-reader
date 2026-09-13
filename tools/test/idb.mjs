@@ -54,12 +54,17 @@ class FakeStore {
 }
 
 class FakeTransaction {
-  constructor(db, names) {
+  constructor(db, names, mode) {
     this.db = db;
     this.names = names;
     this.pending = 0;
     this.finished = false;
     this.error = null;
+    // IndexedDB runs readwrite transactions with overlapping scope one after
+    // another. Without that here, the quota counter's read-modify-write would
+    // lose increments under the adapter's concurrent per-section requests —
+    // and the test would be measuring the fake, not the code.
+    this.gate = mode === "readwrite" ? db._lock(names, this) : Promise.resolve();
   }
 
   objectStore(name) {
@@ -70,7 +75,7 @@ class FakeTransaction {
   _run(exec) {
     const request = new FakeRequest();
     this.pending++;
-    queueMicrotask(() => {
+    this.gate.then(() => {
       request.result = exec();
       this.pending--;
       request.onsuccess?.();
@@ -80,6 +85,7 @@ class FakeTransaction {
         if (this.finished || this.pending > 0) return;
         this.finished = true;
         this.oncomplete?.();
+        this.release?.();
       });
     });
     return request;
@@ -92,7 +98,24 @@ class FakeDb {
     this.version = version;
     this.stores = stores;
     this.closed = false;
+    this.held = new Set();
     this.objectStoreNames = { contains: (n) => stores.has(n) };
+  }
+
+  // A readwrite transaction waits for every live one whose scope it overlaps,
+  // then holds its own place until it commits.
+  _lock(names, tx) {
+    const waitFor = [...this.held]
+      .filter((lock) => lock.names.some((name) => names.includes(name)))
+      .map((lock) => lock.done);
+    let release;
+    const lock = { names, done: new Promise((resolve) => (release = resolve)) };
+    this.held.add(lock);
+    tx.release = () => {
+      this.held.delete(lock);
+      release();
+    };
+    return Promise.all(waitFor);
   }
 
   createObjectStore(name, { keyPath }) {
@@ -102,9 +125,9 @@ class FakeDb {
     };
   }
 
-  transaction(names, _mode) {
+  transaction(names, mode = "readonly") {
     if (this.closed) throw new Error("the connection is closed");
-    return new FakeTransaction(this, Array.isArray(names) ? names : [names]);
+    return new FakeTransaction(this, Array.isArray(names) ? names : [names], mode);
   }
 
   close() {

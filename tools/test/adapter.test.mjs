@@ -4,6 +4,13 @@ import { outline } from "../../src/model/adapter.js";
 import { ProviderError } from "../../src/model/errors.js";
 import { completeSections } from "../../src/model/partial-json.js";
 import { installFetch, goodAnswer, titlesFrom, rateLimited, sse, contentChunks } from "./stub.mjs";
+import { installIndexedDb } from "./idb.mjs";
+
+// The adapter counts every dispatched request against the day's quota, so the
+// store has to exist. Nothing here approaches a Tier 1 daily limit; the
+// counter's own behaviour is `quota.test.mjs`, and the fallback it drives is
+// `cache.test.mjs`.
+installIndexedDb();
 
 const FIX = new URL("../../fixtures/", import.meta.url);
 const fixturePath = (name) => new URL(`${name}.json`, FIX);

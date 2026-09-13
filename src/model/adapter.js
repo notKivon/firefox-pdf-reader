@@ -9,6 +9,7 @@ import { ProviderError, isFallbackWorthy } from "./errors.js";
 import { chatJson } from "./openai-compat.js";
 import { fallbacksFor, getProvider, PROVIDERS } from "./providers.js";
 import { outlineSchema, sectionMessages, tldrMessages, tldrSchema, wholeDocumentMessages } from "./prompts.js";
+import { hasRoomFor, record, resetsAtText } from "../store/quota.js";
 
 // Enough to keep a per-section run busy without tripping a per-minute limit.
 const CONCURRENCY = 3;
@@ -57,13 +58,20 @@ export async function outline({ sections, providerId, resolveKey, meta, onProgre
   // The chain is same-destination only. Reaching another destination — the local
   // model above all — is the reader's explicit choice, never a consequence of a
   // quota running out, so this stops and names the alternatives instead.
+  //
+  // CLAUDE.md asks this message to say which provider is exhausted and when its
+  // quota comes back, in the reader's own timezone: it is the one fact that
+  // tells them whether to wait or to pick the local model.
+  const last = getProvider(tried.at(-1));
   throw new ProviderError(
-    `${getProvider(tried.at(-1)).label} is rate limited and no other ` +
-      `${getProvider(providerId).destination} provider is available.`,
+    `${last.label} ${lastError?.quota ? "has used its quota for today" : "is rate limited"} ` +
+      `and no other ${getProvider(providerId).destination} provider is available. ` +
+      `The daily quota resets at ${resetsAtText()}.`,
     {
       kind: "exhausted",
       providerId: tried.at(-1),
       tried,
+      resetsAtText: resetsAtText(),
       otherDestinations: otherDestinationIds(providerId),
       cause: lastError,
     },
@@ -77,14 +85,36 @@ function otherDestinationIds(providerId) {
 
 async function run({ id, sendable, resolveKey, meta, onProgress, signal }) {
   const provider = getProvider(id);
+  // Asked before the key is even read: a run that cannot finish inside the
+  // day's remaining requests should move to the next provider rather than
+  // spend half its quota and stop mid-paper. `requests` is the whole run —
+  // one under whole-document, N + 1 under per-section.
+  const planned = provider.strategy === "whole-document" ? 1 : sendable.length + 1;
+  if (!(await hasRoomFor(id, planned))) {
+    throw new ProviderError(
+      `${provider.label} has used its daily quota of ${provider.limits.rpd} requests.`,
+      { kind: "rate-limit", providerId: id, quota: true },
+    );
+  }
+
   const apiKey = provider.keyRef ? await resolveKey(provider.keyRef) : null;
 
   // Totals across however many requests the strategy made — one under
-  // whole-document, N + 1 under per-section. `requests` is what step 10's quota
-  // counter needs; the token counts are the provider's own, not an estimate.
+  // whole-document, N + 1 under per-section. The token counts are the
+  // provider's own, not an estimate.
   const usage = { promptTokens: 0, completionTokens: 0, totalTokens: 0, requests: 0 };
   const call = async (messages, schema, onPartial) => {
-    const result = await chatJson({ providerId: id, provider, apiKey, messages, schema, onPartial, signal });
+    let result;
+    try {
+      result = await chatJson({ providerId: id, provider, apiKey, messages, schema, onPartial, signal });
+    } catch (err) {
+      // A ProviderError carrying a status means the provider answered, so it
+      // counted the request and so must we — a 429 included. A network failure
+      // or a missing key never reached them and never counted.
+      if (err instanceof ProviderError && err.status) await record(id);
+      throw err;
+    }
+    await record(id);
     usage.requests++;
     usage.promptTokens += result.usage?.prompt_tokens ?? 0;
     usage.completionTokens += result.usage?.completion_tokens ?? 0;

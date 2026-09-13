@@ -12,18 +12,27 @@ export class ProviderError extends Error {
    * @param {string} [info.providerId]
    * @param {number} [info.status] HTTP status when there was a response
    * @param {number} [info.retryAfterMs] from a Retry-After header
+   * @param {boolean} [info.quota] true when the day's own counter refused the
+   *   run before it was dispatched, rather than the provider answering 429
+   * @param {string} [info.resetsAtText] when the daily quota comes back, in
+   *   Asia/Hong_Kong — the fact that decides whether to wait or switch
    * @param {string[]} [info.tried] provider ids attempted, for "exhausted"
    * @param {string[]} [info.otherDestinations] provider ids on another
    *   destination, which the user may choose but nothing may reach automatically
    * @param {unknown} [info.cause]
    */
-  constructor(message, { kind, providerId, status, retryAfterMs, tried, otherDestinations, cause } = {}) {
+  constructor(
+    message,
+    { kind, providerId, status, retryAfterMs, quota, resetsAtText, tried, otherDestinations, cause } = {},
+  ) {
     super(message, { cause });
     this.name = "ProviderError";
     this.kind = kind ?? "http";
     this.providerId = providerId;
     this.status = status;
     this.retryAfterMs = retryAfterMs;
+    this.quota = quota ?? false;
+    this.resetsAtText = resetsAtText;
     this.tried = tried;
     this.otherDestinations = otherDestinations;
   }
@@ -37,6 +46,8 @@ export class ProviderError extends Error {
       providerId: this.providerId,
       status: this.status,
       retryAfterMs: this.retryAfterMs,
+      quota: this.quota,
+      resetsAtText: this.resetsAtText,
       tried: this.tried,
       otherDestinations: this.otherDestinations,
     };
