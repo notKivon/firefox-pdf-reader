@@ -6,13 +6,17 @@ import { UNRENDERABLE } from "../extract/normalize.js";
 const SCANNED_CHARS_PER_PAGE = 200;
 
 export function createDebugPane({ root, onJump }) {
-  root.replaceChildren();
-  const heading = el("h2", "debug-heading", "Extraction");
+  // One collapsible block, open while the text layer is read and folded away by
+  // `collapse()` once an outline is on screen, so the outline leads the pane.
+  const panel = el("details", "debug-panel");
+  panel.open = true;
+  const heading = el("summary", "debug-heading", "Extraction");
   const status = el("p", "debug-status", "Reading the text layer…");
   const stats = el("dl", "debug-stats");
   const sections = el("div", "debug-sections");
   const pages = el("div", "debug-pages");
-  root.append(heading, status, stats, sections, pages);
+  panel.append(heading, status, stats, sections, pages);
+  root.replaceChildren(panel);
 
   function stat(label, value) {
     stats.append(el("dt", null, label), el("dd", null, String(value)));
@@ -143,7 +147,7 @@ export function createDebugPane({ root, onJump }) {
     }
     if (counts.size) {
       stat("Unrenderable characters", [...counts.values()].reduce((a, b) => a + b, 0));
-      root.insertBefore(renderUnrenderable([...counts].sort((a, b) => b[1] - a[1])), sections);
+      panel.insertBefore(renderUnrenderable([...counts].sort((a, b) => b[1] - a[1])), sections);
     }
 
     if (result?.scanned || charsPerPage < SCANNED_CHARS_PER_PAGE) {
@@ -153,7 +157,7 @@ export function createDebugPane({ root, onJump }) {
         `Only ${Math.round(charsPerPage)} characters per page: this looks like a scanned PDF, ` +
           "so there is no text layer to outline. OCR is out of scope.",
       );
-      root.insertBefore(warn, sections);
+      panel.insertBefore(warn, sections);
     } else if (result) {
       stat("Sections", result.sections.length);
       renderSections(result);
@@ -168,5 +172,9 @@ export function createDebugPane({ root, onJump }) {
     });
   }
 
-  return { progress, render, fail };
+  function collapse() {
+    panel.open = false;
+  }
+
+  return { progress, render, fail, collapse };
 }

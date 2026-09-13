@@ -153,6 +153,25 @@ await test("a finished outline renders, jumps, and hands its targets to the spy"
   assert.ok(root.find("outline-section").classList.contains("is-current"));
 });
 
+await test("onReady fires for a finished or cached outline, never for the card, an error or a partial fill", async () => {
+  const outline = { model: "gemini-3.8-flash", tldr: "T.", sections: [{ title: "1 Introduction", page: 1, y: 700, bullets: ["B."] }] };
+  const run = async (reply, after) => {
+    stubBrowser(reply);
+    let ready = 0;
+    const pane = createOutlinePane({ root: new FakeNode("div"), onReady: () => ready++ });
+    pane.start(DOC);
+    await settle();
+    after?.(pane);
+    return ready;
+  };
+  assert.equal(await run((m) => (m.type === "plan" ? { ...PLAN, consented: true } : outline)), 1, "fresh outline");
+  assert.equal(await run(() => ({ ...PLAN, cacheHit: true, outline })), 1, "cache hit");
+  assert.equal(await run(() => PLAN), 0, "the confirm card");
+  assert.equal(await run((m) => (m.type === "plan" ? { ...PLAN, consented: true } : { error: "auth", message: "x" })), 0, "an error");
+  const partial = (pane) => pane.progress({ hash: "abc", sections: outline.sections });
+  assert.equal(await run((m) => (m.type === "plan" ? { ...PLAN, consented: true } : new Promise(() => {})), partial), 0, "a partial fill");
+});
+
 await test("leaving the outline for another state tells the spy there is nothing to track", async () => {
   stubBrowser((message) =>
     message.type === "plan" ? { ...PLAN, consented: true } : { error: "auth", message: "No API key is stored." },

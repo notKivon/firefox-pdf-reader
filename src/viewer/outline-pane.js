@@ -24,8 +24,9 @@ const forSending = (sections) => sections.map(({ lines, ...rest }) => rest);
  * @param {(target: {page, y}) => void} [args.onJump] scrolls the paper
  * @param {(targets: {page, y}[]) => void} [args.onSections] hands the scroll-spy
  *   the jump targets currently on screen — an empty list whenever there are none
+ * @param {() => void} [args.onReady] a finished outline is on screen, fresh or cached
  */
-export function createOutlinePane({ root, onJump, onSections }) {
+export function createOutlinePane({ root, onJump, onSections, onReady }) {
   let current = null; // {hash, sections, meta, providerId, label}
   let list = null; // the rendered outline, while one is on screen
 
@@ -78,6 +79,7 @@ export function createOutlinePane({ root, onJump, onSections }) {
     show(box);
     list = rendered;
     onSections?.(rendered.targets);
+    onReady?.();
   }
 
   async function replan(providerId) {

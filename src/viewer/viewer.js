@@ -62,8 +62,7 @@ function setDocumentTitle(name) {
 
 // Extraction is its own failure domain too: a paper that defeats the text layer
 // must still render and still scroll.
-async function runExtraction(view, pdfDoc) {
-  const pane = createDebugPane({ root: els.debug, onJump: (target) => view.scrollToSection(target) });
+async function runExtraction(pane, pdfDoc) {
   try {
     const pages = await extractPages(pdfDoc, { onPage: (_, done, total) => pane.progress(done, total) });
     const sideways = pages.reduce((n, page) => n + page.droppedSideways, 0);
@@ -168,10 +167,12 @@ async function main() {
     view,
     onChange: (index) => outlinePane?.setActive(index),
   });
+  const debugPane = createDebugPane({ root: els.debug, onJump: (target) => view.scrollToSection(target) });
   outlinePane = createOutlinePane({
     root: els.outline,
     onJump: (target) => view.scrollToSection(target),
     onSections: (targets) => spy.setSections(targets),
+    onReady: () => debugPane.collapse(),
   });
   browser.runtime.onMessage.addListener((message) => {
     if (message?.type === "outline-progress") outlinePane.progress(message);
@@ -179,7 +180,7 @@ async function main() {
 
   // Started before the store round-trip rather than after it: extraction is the
   // slow part, and the outline needs its sections before it needs the title.
-  const extraction = runExtraction(view, doc);
+  const extraction = runExtraction(debugPane, doc);
 
   // Identity and history are a separate failure domain from rendering: a broken
   // IndexedDB must not cost the reader the paper.
