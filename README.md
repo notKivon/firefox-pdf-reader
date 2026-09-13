@@ -87,9 +87,9 @@ Then, once per profile:
 5. Open settings — the ⚙ in the viewer toolbar, or `about:addons` → Scholar Reader
    → Preferences — and paste the Gemini API key. It is stored in
    `browser.storage.local` for that profile. A browser restart removes a
-   temporary add-on, and that may clear its storage too: the key, the outline
-   cache and the send consents. This has not been tested. If settings shows no
-   key after a restart, enter it again.
+   temporary add-on, and Firefox may clear its storage along with it. The user
+   found no problem after a restart on 2026-09-13. If settings ever shows no key
+   after a restart, enter it again.
 6. **Only for the local model:** Ollama checks the request's `Origin`. With the
    macOS desktop app, run `launchctl setenv OLLAMA_ORIGINS "moz-extension://*"` and
    restart Ollama. This does not survive a reboot. If Ollama was started from a
