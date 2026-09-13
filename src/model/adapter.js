@@ -5,8 +5,8 @@
 // Callers ask for an outline of a document; they never loop over sections
 // themselves and never learn which strategy served them.
 import { attachTargets } from "./align.js";
-import { ProviderError, isFallbackWorthy } from "./errors.js";
-import { chatJson } from "./openai-compat.js";
+import { ProviderError, isFallbackWorthy, isSectionLocal } from "./errors.js";
+import { chatJson } from "./transport.js";
 import { fallbacksFor, getProvider, PROVIDERS } from "./providers.js";
 import { outlineSchema, sectionMessages, tldrMessages, tldrSchema, wholeDocumentMessages } from "./prompts.js";
 import { hasRoomFor, record, resetsAtText } from "../store/quota.js";
@@ -163,11 +163,12 @@ async function perSection({ id, sendable, meta, call, onProgress }) {
         // One section in, one section out: the same checksum, one at a time.
         results[i] = attachTargets([sendable[i]], data.sections, id)[0];
       } catch (err) {
-        // A malformed answer is this section's problem and the others still
-        // stand. Anything else — a rate limit, a bad key, the network — would
-        // fail the next request identically, so it stops the run and the caller
-        // decides whether to fall back.
-        if (!(err instanceof ProviderError) || err.kind !== "malformed") {
+        // A malformed answer, or a section too large for the provider's
+        // context, is this section's problem and the others still stand.
+        // Anything else — a rate limit, a bad key, the network — would fail the
+        // next request identically, so it stops the run and the caller decides
+        // whether to fall back.
+        if (!isSectionLocal(err)) {
           stopped = err;
           throw err;
         }

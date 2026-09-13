@@ -8,7 +8,7 @@ export class ProviderError extends Error {
   /**
    * @param {string} message reader-facing text
    * @param {object} info
-   * @param {"rate-limit"|"auth"|"network"|"origin-refused"|"malformed"|"http"|"exhausted"|"cancelled"} info.kind
+   * @param {"rate-limit"|"auth"|"network"|"origin-refused"|"malformed"|"too-large"|"http"|"exhausted"|"cancelled"} info.kind
    * @param {string} [info.providerId]
    * @param {number} [info.status] HTTP status when there was a response
    * @param {number} [info.retryAfterMs] from a Retry-After header
@@ -58,3 +58,10 @@ export class ProviderError extends Error {
 // auth failure or a malformed response would fail identically on the next
 // provider, so those stop where they happen.
 export const isFallbackWorthy = (err) => err instanceof ProviderError && err.kind === "rate-limit";
+
+// Under `per-section`, whether a failure belongs to the one section that hit it
+// or to the whole run. A malformed answer and a section that will not fit the
+// context window are both about this section's own request; a rate limit, a bad
+// key or the network would fail the next request identically.
+export const isSectionLocal = (err) =>
+  err instanceof ProviderError && (err.kind === "malformed" || err.kind === "too-large");

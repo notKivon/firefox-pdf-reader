@@ -53,7 +53,15 @@ export const PROVIDERS = {
     strategy: "per-section",
     limits: null,
     pricing: null,
-    params: { options: { num_ctx: 32768 } },
+    // Spoken to over Ollama's own /api/chat rather than its OpenAI-compatible
+    // layer, which silently drops `options` — so `num_ctx` never arrived and
+    // the model loaded at 4096, truncating long sections without a word. See
+    // model/ollama-native.js for the measurement.
+    useNativeEndpoint: true,
+    // `think: false` because the bullets are the answer and the thinking is
+    // not: gemma4 spent 631 eval tokens against 199 with it off, for the same
+    // output, and a local model's latency is the reader's wait.
+    params: { options: { num_ctx: 32768 }, think: false },
     supports: { jsonSchema: true, streaming: true, reasoningOff: true },
   },
 };

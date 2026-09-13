@@ -6,6 +6,7 @@
 // viewer context — that is why the viewer never calls a provider itself.
 import { ProviderError } from "./errors.js";
 import { completeSections } from "./partial-json.js";
+import { decodeJson, networkError, originRefusedError } from "./wire.js";
 
 /**
  * @param {object} args
@@ -57,7 +58,7 @@ export async function chatJson({ providerId, provider, apiKey, messages, schema,
   if (!response.ok) throw await httpError(response, providerId, provider);
 
   const { content, usage } = await readStream(response, { onPartial, providerId, provider });
-  return { data: decode(content, providerId), usage, text: content };
+  return { data: decodeJson(content, providerId), usage, text: content };
 }
 
 // SSE: `data: {json}` lines, terminated by `data: [DONE]`. Deltas accumulate
@@ -111,23 +112,6 @@ async function readStream(response, { onPartial, providerId, provider }) {
   return { content, usage };
 }
 
-function decode(content, providerId) {
-  if (!content.trim()) {
-    throw new ProviderError("The model returned an empty response.", { kind: "malformed", providerId });
-  }
-  try {
-    return JSON.parse(content);
-  } catch (cause) {
-    // CLAUDE.md: prose parsing is never a fallback. A malformed response is an
-    // error the reader sees.
-    throw new ProviderError("The model's response was not valid JSON.", {
-      kind: "malformed",
-      providerId,
-      cause,
-    });
-  }
-}
-
 async function httpError(response, providerId, provider) {
   const detail = (await response.text().catch(() => "")).slice(0, 300);
 
@@ -140,14 +124,11 @@ async function httpError(response, providerId, provider) {
       retryAfterMs: Number.isFinite(retryAfter) ? retryAfter * 1000 : undefined,
     });
   }
-  // Ollama checks the Origin header server-side; this is not browser CORS and
-  // no permission grant fixes it. The remedy is specific, so say it.
+  // A local endpoint that refuses an origin is refusing it server-side; that is
+  // not browser CORS and the remedy is specific. Shared with the native
+  // transport because the rule belongs to the destination, not to the wire.
   if (provider.destination === "local" && (response.status === 403 || /origin/i.test(detail))) {
-    return new ProviderError(
-      "Ollama refused the request's origin. Restart it with " +
-        'OLLAMA_ORIGINS="moz-extension://*" ollama serve',
-      { kind: "origin-refused", providerId, status: response.status },
-    );
+    return originRefusedError(providerId, response.status);
   }
   if (response.status === 401 || response.status === 403) {
     return new ProviderError(`${provider.label} rejected the API key (${response.status}).`, {
@@ -160,17 +141,4 @@ async function httpError(response, providerId, provider) {
     `${provider.label} returned ${response.status}${detail ? `: ${detail}` : ""}`,
     { kind: "http", providerId, status: response.status },
   );
-}
-
-function networkError(cause, providerId, provider) {
-  if (cause?.name === "AbortError") return cause;
-  const remedy =
-    provider.destination === "local"
-      ? ` Is Ollama running at ${provider.baseUrl}?`
-      : " Check the network connection.";
-  return new ProviderError(`Could not reach ${provider.label}.${remedy}`, {
-    kind: "network",
-    providerId,
-    cause,
-  });
 }

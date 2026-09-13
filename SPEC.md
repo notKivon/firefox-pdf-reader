@@ -24,7 +24,10 @@ src/
   model/
     providers.js     provider descriptors (no keys)
     adapter.js       outline(document) → sections[]; strategy dispatch, fallback
+    transport.js     picks the wire a provider is spoken to over
     openai-compat.js fetch against an OpenAI-compatible chat-completions endpoint
+    ollama-native.js fetch against Ollama's own /api/chat (NDJSON, `options`)
+    wire.js          JSON decode + the two failures both transports share
     prompts.js       PROMPT_VERSION + prompt builders + JSON schema
   store/
     db.js            IndexedDB open/upgrade
@@ -116,7 +119,8 @@ export const PROVIDERS = {
     destination: "local",
     strategy: "per-section",
     limits: null,
-    params: { options: { num_ctx: 32768 } },
+    useNativeEndpoint: true,
+    params: { options: { num_ctx: 32768 }, think: false },
     supports: { jsonSchema: true, streaming: true, reasoningOff: true },
   },
 };
@@ -125,6 +129,8 @@ export const PROVIDERS = {
 Limits above are the **real Tier 1 (paid) numbers**, confirmed 2026-09-11 — the free-tier figures this spec was drafted with were placeholders and were an order of magnitude out. `tpm` is recorded because it, not `rpd`, is the limit a whole-document request can realistically approach.
 
 `destination` names the party the text reaches, and is what consent and automatic fallback are scoped by (CLAUDE.md). `pricing` is per million tokens, and exists only so the confirm card can state a cost; nothing else reads it. The Gemini figures are promotional and double on 2027-01-01 — the constant needs updating by hand then.
+
+`ollama` gained `useNativeEndpoint` and `think: false` at step 12; see `model/ollama-native.js` below for why the OpenAI-compatible layer could not carry `num_ctx`.
 
 `gemini-prod` **keeps `strategy: "whole-document"`**, decided 2026-09-11 after the original reason for it (a 20-requests-per-day cap) turned out never to have existed. It stays because it is cheapest in tokens, gives a TL;DR written from the full text rather than from a digest of its own bullets, and keeps quota and 429 fallback to one clean request per paper; the alignment risk that argued against it is answered by the adapter's title checksum rather than by changing strategy. `per-section` is not the poor relation here — it is what `gemini-dev` and `ollama` use, so that path is built and exercised regardless of what the default does.
 
@@ -144,8 +150,17 @@ The module also exports `DEFAULT_PROVIDER_ID` (`"gemini-prod"` — the user's st
 - `POST {baseUrl}chat/completions`, `Authorization: Bearer <key>` when `keyRef` is set.
 - `response_format: { type: "json_schema", json_schema: { name: "outline", strict: true, schema } }`.
 - Streams with `stream: true` and parses SSE incrementally so partial sections can render. Under `per-section` this is trivial — each response is a small complete object. Under `whole-document`, which is what the default provider uses, progressive fill means scanning the partially accumulated JSON for **complete** objects inside `sections[]` and emitting those; the checksum above still runs over the finished response, so a partially rendered pane is never a cached one.
-- Ollama needs no `Authorization` header, but **does** check the `Origin` header server-side — this is not browser CORS. `OLLAMA_ORIGINS` must include `moz-extension://*`. Detect a refused origin specifically and surface that exact remedy rather than a generic network error.
-- Gemini's OpenAI-compatibility layer is documented as beta and may not carry `thoughtsTokenCount` into OpenAI's usage shape. If thinking-token counts are needed, that one provider may call the native endpoint instead; keep an `useNativeEndpoint` escape hatch in the descriptor rather than reshaping the adapter.
+- Ollama needs no `Authorization` header, but **does** check the `Origin` header server-side — this is not browser CORS. `OLLAMA_ORIGINS` must include `moz-extension://*`. Detect a refused origin specifically and surface that exact remedy rather than a generic network error. The remedy names both routes, because the one that applies depends on how Ollama was started (see `wire.js` and PROGRESS.md).
+- Gemini's OpenAI-compatibility layer is documented as beta and may not carry `thoughtsTokenCount` into OpenAI's usage shape. If thinking-token counts are needed, that one provider may call the native endpoint instead; the `useNativeEndpoint` escape hatch in the descriptor exists for exactly this and does not reshape the adapter.
+
+## model/ollama-native.js
+The escape hatch above, taken — by Ollama rather than by Gemini, and for a different reason. **Ollama's OpenAI-compatible layer silently drops the `options` object**, so `num_ctx` never reaches the server and the model loads at its 4096-token default; a ~13k-token prompt sent that way reported `prompt_tokens: 2051` and returned an empty completion, with nothing to say the input had been truncated. Sections in the fixture set reach 7.5k tokens, so this is the common case. Measured 2026-09-13 against Ollama 0.34.0 and `/api/ps`.
+
+- `POST {origin}/api/chat`, NDJSON rather than SSE: one JSON object per line, deltas in `message.content`, a final `done: true` object carrying `prompt_eval_count` / `prompt_eval_cached_count` / `eval_count`, which are mapped onto OpenAI's usage names so the adapter has one code path.
+- The JSON schema travels as `format`, not wrapped in `response_format`. `minItems`/`maxItems` are honoured, verified the same way Gemini's were.
+- `thinking` arrives on the same message as `content` and is dropped — it is not the answer, and appending it would break the JSON. `think: false` in the descriptor's `params` turns it off entirely.
+- **A request that would not fit the context window is refused before it is sent**, because Ollama truncates instead of failing: a section over the window would otherwise be summarised from whatever survived the cut, silently. Under `per-section` that refusal costs that one section, not the run — see `isSectionLocal` in `errors.js`.
+- Same `chatJson` signature and return shape as `openai-compat.js`; `transport.js` picks between them off `useNativeEndpoint`. The adapter never learns which answered.
 
 ## model/prompts.js
 - `export const PROMPT_VERSION = 1;` — bump on any prompt text or schema change.

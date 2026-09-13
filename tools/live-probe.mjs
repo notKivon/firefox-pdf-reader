@@ -17,9 +17,17 @@
 //   - whether Results-type sections keep their reported numbers.
 import { readFileSync } from "node:fs";
 import { homedir } from "node:os";
+import { installIndexedDb } from "./test/idb.mjs";
 import { outline } from "../src/model/adapter.js";
 import { getProvider } from "../src/model/providers.js";
 import { MAX_BULLET_WORDS } from "../src/model/prompts.js";
+
+// Step 10 made the adapter count every dispatched request against the day's
+// quota, and Node has no IndexedDB. The in-memory double is the right one here:
+// what this measures is a model's output, and yesterday's counters are no part
+// of that. `db.js` only reaches for the store when a request is recorded, so
+// installing it after the imports is early enough.
+installIndexedDb();
 
 const args = new Map();
 for (let i = 2; i < process.argv.length; i += 2) args.set(process.argv[i].replace(/^--/, ""), process.argv[i + 1]);
@@ -86,7 +94,9 @@ function report(label, result, sent) {
   }
 }
 
-const apiKey = loadKey();
+// A keyless provider — the local model — needs no key file, and demanding one
+// would make the offline path unprobeable.
+const apiKey = getProvider(providerId).keyRef ? loadKey() : null;
 const resolveKey = async () => apiKey;
 const { sections } = JSON.parse(readFileSync(new URL(`../fixtures/${fixtureName}.json`, import.meta.url), "utf8"));
 const sendable = sections.filter((s) => s.text.trim());
@@ -100,7 +110,7 @@ report(fixtureName, result, sendable);
 // this is where it shows, and the adapter's own checks become the only guarantee.
 console.log("\n=== schema-binding probe ===");
 const probeSections = sendable.slice(0, 3);
-const { chatJson } = await import("../src/model/openai-compat.js");
+const { chatJson } = await import("../src/model/transport.js");
 const { outlineSchema } = await import("../src/model/prompts.js");
 try {
   const { data } = await chatJson({
