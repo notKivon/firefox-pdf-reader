@@ -57,7 +57,7 @@ export function createPdfView({ container, viewerEl, onPageChange, onScaleChange
   eventBus.on("pagechanging", (e) => {
     onPageChange?.(e.pageNumber, pdfViewer.pagesCount);
   });
-  eventBus.on("scalechanging", (e) => onScaleChange?.(e.scale));
+  eventBus.on("scalechanging", (e) => onScaleChange?.(e.scale, e.presetValue));
 
   // "page-width" resolves to a fixed scale at assignment time, so a pane resize
   // has to re-assign it. This is what pdf.js's own viewer does on resize.
@@ -167,7 +167,8 @@ export function createPdfView({ container, viewerEl, onPageChange, onScaleChange
     if (next) pdfViewer.currentScaleValue = String(next);
   }
 
-  // A typed page or zoom. Values arrive already validated by toolbar-fields.js.
+  // A typed page or zoom, validated by toolbar-fields.js. `zoomTo` also takes a
+  // pdf.js preset such as "page-width", which the resize observer then keeps.
   function goToPage(n) {
     if (pdfDocument) pdfViewer.currentPageNumber = Math.min(Math.max(n, 1), pdfViewer.pagesCount);
   }

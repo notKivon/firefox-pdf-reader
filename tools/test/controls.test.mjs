@@ -28,12 +28,14 @@ class FakeInput {
   focus() { globalThis.document.activeElement = this; this.fire("focus"); }
   blur() { if (globalThis.document.activeElement === this) globalThis.document.activeElement = null; }
   select() {}
+  setAttribute(name, value) { (this.attrs ??= {})[name] = String(value); }
+  click() { this.fire("click"); }
 }
 
 function rig() {
   globalThis.document = { activeElement: null };
   const calls = [];
-  const els = { pageInput: new FakeInput(), pageTotal: new FakeInput(), zoomInput: new FakeInput() };
+  const els = { pageInput: new FakeInput(), pageTotal: new FakeInput(), zoomInput: new FakeInput(), fitButton: new FakeInput() };
   const view = { goToPage: (n) => calls.push(["page", n]), zoomTo: (s) => calls.push(["zoom", s]) };
   const fields = createToolbarFields({ ...els, view });
   fields.setPage(3, 12);
@@ -92,6 +94,17 @@ test("a typed zoom is applied as a scale", () => {
   zoomInput.value = "200%";
   zoomInput.fire("change");
   assert.deepEqual(calls, [["zoom", 2]]);
+});
+
+test("fit to width asks pdf.js for its preset, and stays lit only while it holds", () => {
+  const { fitButton, fields, calls } = rig();
+  assert.equal(fitButton.attrs["aria-pressed"], "false");
+  fitButton.click();
+  assert.deepEqual(calls, [["zoom", "page-width"]]);
+  fields.setScale(1.37, "page-width");
+  assert.equal(fitButton.attrs["aria-pressed"], "true");
+  fields.setScale(1.5, undefined);
+  assert.equal(fitButton.attrs["aria-pressed"], "false", "an explicit zoom releases it");
 });
 
 test("scrolling does not overwrite a page the reader is halfway through typing", () => {

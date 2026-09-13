@@ -29,6 +29,7 @@ const els = {
   pane: document.getElementById("outline-pane"),
   zoomIn: document.getElementById("zoom-in"),
   zoomOut: document.getElementById("zoom-out"),
+  fitButton: document.getElementById("fit-width"),
   theme: document.getElementById("theme-toggle"),
 };
 
@@ -109,7 +110,7 @@ async function main() {
     container: els.container,
     viewerEl: els.viewer,
     onPageChange: (page, total) => fields.setPage(page, total),
-    onScaleChange: (scale) => fields.setScale(scale),
+    onScaleChange: (scale, preset) => fields.setScale(scale, preset),
   });
   const fields = createToolbarFields({ ...els, view });
 

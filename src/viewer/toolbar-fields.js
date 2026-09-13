@@ -58,7 +58,7 @@ function bindField(input, { display, commit }) {
   };
 }
 
-export function createToolbarFields({ pageInput, pageTotal, zoomInput, view }) {
+export function createToolbarFields({ pageInput, pageTotal, zoomInput, fitButton, view }) {
   let page = 0;
   let total = 0;
   let scale = 0;
@@ -78,6 +78,10 @@ export function createToolbarFields({ pageInput, pageTotal, zoomInput, view }) {
     },
   });
 
+  // "page-width" is measured against the PDF pane alone, so it already allows for
+  // the outline pane, and pdf.js re-fits it whenever that pane is resized.
+  fitButton?.addEventListener("click", () => view.zoomTo("page-width"));
+
   return {
     setPage(nextPage, nextTotal) {
       page = nextPage;
@@ -86,9 +90,12 @@ export function createToolbarFields({ pageInput, pageTotal, zoomInput, view }) {
       pageInput.max = String(nextTotal);
       refreshPage();
     },
-    setScale(nextScale) {
+    // Pressed while the zoom is still following the width; any explicit zoom,
+    // typed or stepped, arrives without a preset and releases it.
+    setScale(nextScale, preset) {
       scale = nextScale;
       refreshZoom();
+      fitButton?.setAttribute("aria-pressed", String(preset === "page-width"));
     },
   };
 }
