@@ -1,12 +1,13 @@
 // IndexedDB "scholar-reader": one shared connection, thin promise helpers.
 // Every store module (docs, outlines, quota) goes through here.
 const DB_NAME = "scholar-reader";
-const DB_VERSION = 2;
+const DB_VERSION = 3;
 
 export const DOCS = "docs";
 export const OUTLINES = "outlines";
 export const CONSENTS = "consents";
 export const QUOTA = "quota";
+export const INBOX = "inbox";
 
 let connection = null;
 
@@ -32,6 +33,11 @@ function upgrade(db) {
   }
   if (!db.objectStoreNames.contains(QUOTA)) {
     db.createObjectStore(QUOTA, { keyPath: "key" });
+  }
+  if (!db.objectStoreNames.contains(INBOX)) {
+    // Version 3: PDF bytes captured by the background, waiting for the viewer
+    // tab they were captured for. Transient — see store/inbox.js.
+    db.createObjectStore(INBOX, { keyPath: "token" });
   }
 }
 

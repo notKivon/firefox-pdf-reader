@@ -8,7 +8,10 @@ Implementation detail for each part. Core domain rules live in **CLAUDE.md** —
 src/
   background/
     index.js         entry: wires interceptor + message router
-    intercept.js     webRequest.onHeadersReceived → redirect to viewer
+    intercept.js     webRequest.onHeadersReceived → capture (or, as a fallback, redirect)
+    capture.js       StreamFilter capture of the PDF response, header rewrite, hand-off
+    skeleton.js      the scriptless reader-shaped page shown during a capture
+    prefs.js         theme + outline width mirrored for skeleton pages
     router.js        runtime.onMessage handler; the ONLY place provider calls happen
     plan.js          the `plan` message: what would be sent, and where, without sending
     bypass.js        single-use per-tab pass for the escape hatch to the browser's own viewer
@@ -16,7 +19,8 @@ src/
   viewer/
     viewer.html      two-pane shell
     viewer.js        entry: boots PDFViewer, wires panes
-    source.js        where the PDF comes from: interceptor URL or a picked local file
+    source.js        where the PDF comes from: captured bytes, interceptor URL, or a picked local file
+    timing.js        one console line per opened paper: where the load time went
     actions.js       toolbar: settings, browser's own viewer, open local file
     pdfview.js       pdfjs-dist PDFViewer setup, scrollToSection(), theme
     outline-pane.js  renders sections/bullets, click-to-jump, scroll-spy
@@ -47,6 +51,7 @@ src/
     quota.js         per-provider request counters keyed by Pacific date
     apikeys.js       provider keys in storage.local, read only by the background
     settings.js      provider order and origin opt-out list, normalised
+    inbox.js         captured PDF bytes awaiting their viewer tab (1 h TTL)
   settings/
     settings.html    key entry, provider order, origin opt-out, consent revocation
     settings.js      entry; one *-section.js per section, model.js for the testable logic
@@ -63,6 +68,14 @@ manifest.json
 - Registers `browser.webRequest.onHeadersReceived` per CLAUDE.md's interception rule.
 - Reads the origin opt-out list from `storage.local` at registration and on change.
 - Exposes `shouldIntercept(details) → boolean` as a pure function so it is unit-testable without the browser.
+- On a match (and no bypass pass), `capture.js` takes the response when `canCapture` allows — a 200 in a real tab, no content encoding, StreamFilter present — and otherwise returns the old `redirectUrl`.
+
+## background/capture.js
+- `beginCapture(details, deps)` attaches the StreamFilter and returns the rewritten headers: `Content-Type: text/html; charset=utf-8`, the publisher's CSP and `Content-Disposition` dropped, `SKELETON_CSP` (`default-src 'none'; style-src 'unsafe-inline'; …`) added. `Content-Length` and caching headers are left alone.
+- `onstart` writes `skeletonHead`; each `ondata` buffers the chunk and appends at most one `<style>` progress rule per whole percent (per 256 KB with no length). Nothing scripted is ever written.
+- `onstop`: concatenate → `inbox.stash` → `openingRule` → `close` → `tabs.update(tabId, {url, loadReplace: true})`, retried without `loadReplace` if refused. An empty body, one over `MAX_CAPTURE_BYTES` (512 MB) or a failed stash navigates to the viewer **without** a token, so the viewer fetches the URL itself and surfaces any failure in its own error pane. `onerror` (tab closed, navigated away, network failure) navigates nowhere.
+- `store/inbox.js` entries are read, not consumed, so reloading the reader does not refetch a single-use link. They expire after `INBOX_TTL_MS` (1 h), swept on every stash and at background start.
+- The skeleton's colours are copied from `theme.css`; `capture.test.mjs` fails when they drift.
 
 ## background/router.js
 - `runtime.onMessage` handles `{type: "outline", hash, sections, meta}`, `{type: "plan", hash, sections, meta}` and `{type: "quota"}`.

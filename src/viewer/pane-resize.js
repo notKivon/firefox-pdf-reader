@@ -1,6 +1,6 @@
 // Dragging the edge between the paper and the outline pane. The width is
 // per-profile, like the theme: storage.local, not per document.
-const WIDTH_KEY = "outlineWidth";
+export const WIDTH_KEY = "outlineWidth";
 
 export const DEFAULT_WIDTH = 360;
 export const MIN_OUTLINE = 240;

@@ -1,8 +1,18 @@
-// Redirects PDF main-frame responses to the Scholar Reader viewer.
+// Sends PDF main-frame responses to the Scholar Reader viewer.
 //
 // The trigger is the Content-Type header, never the URL extension: arXiv and
 // most publishers serve PDFs from extensionless URLs.
+//
+// Two ways to get there. The normal one captures the response the browser is
+// already receiving (capture.js) so the PDF is fetched once. The redirect, which
+// makes the viewer fetch the URL again, is kept only for what capture cannot
+// safely take: no tab to move, a partial (206) or content-encoded body, or a
+// browser without StreamFilter.
 import { normalizeHosts, OPT_OUT_KEY } from "../store/settings.js";
+import { stash, sweep } from "../store/inbox.js";
+import { nameOf } from "../viewer/source.js";
+import { beginCapture, canCapture } from "./capture.js";
+import { createPrefs } from "./prefs.js";
 
 const VIEWER_PAGE = "viewer.html";
 
@@ -46,19 +56,49 @@ export function shouldIntercept(details, optOut = optOutHosts) {
   return declaresPdf(details.responseHeaders);
 }
 
-export function viewerUrlFor(originalUrl) {
+/**
+ * @param {string} originalUrl where the PDF came from
+ * @param {string} [token] the inbox entry holding its captured bytes
+ */
+export function viewerUrlFor(originalUrl, token) {
   const base = browser.runtime.getURL(VIEWER_PAGE);
-  return `${base}?file=${encodeURIComponent(originalUrl)}`;
+  const capture = token ? `&capture=${encodeURIComponent(token)}` : "";
+  return `${base}?file=${encodeURIComponent(originalUrl)}${capture}`;
+}
+
+// Replacing the history entry keeps Back pointing at the page the PDF was
+// clicked from, not at the capture page — whose URL, for a single-use link,
+// would only be refused if revisited. `loadReplace` is Firefox's own option; if
+// a build rejects it, an extra history entry beats a tab stuck on the skeleton.
+async function navigateTab(tabId, url) {
+  try {
+    await browser.tabs.update(tabId, { url, loadReplace: true });
+  } catch (err) {
+    console.warn("[scholar-reader] tabs.update refused loadReplace; navigating without it", err);
+    await browser.tabs.update(tabId, { url });
+  }
 }
 
 // Set at registration; null only when registered without an escape hatch.
 let bypass = null;
+let prefs = { theme: "dark", outlineWidth: 360 };
 
 function onHeadersReceived(details) {
   if (!shouldIntercept(details, optOutHosts)) return {};
   // The reader asked for the browser's own viewer for this tab's next PDF.
   if (bypass?.consume(details.tabId)) return {};
-  return { redirectUrl: viewerUrlFor(details.url) };
+  const filterResponseData = browser.webRequest.filterResponseData?.bind(browser.webRequest);
+  if (!canCapture(details, Boolean(filterResponseData))) {
+    return { redirectUrl: viewerUrlFor(details.url) };
+  }
+  return beginCapture(details, {
+    filterResponseData,
+    stash,
+    navigate: navigateTab,
+    viewerUrl: viewerUrlFor,
+    name: nameOf(details.url),
+    prefs,
+  });
 }
 
 function onStorageChanged(changes, area) {
@@ -75,6 +115,7 @@ function onStorageChanged(changes, area) {
  */
 export function registerInterceptor(deps = {}) {
   bypass = deps.bypass ?? null;
+  prefs = createPrefs();
   browser.webRequest.onHeadersReceived.addListener(
     onHeadersReceived,
     { urls: ["http://*/*", "https://*/*"], types: ["main_frame"] },
@@ -91,4 +132,7 @@ export function registerInterceptor(deps = {}) {
       // Failing open means PDFs still render; an opt-out host is merely ignored.
       console.error("[scholar-reader] could not read the origin opt-out list", err);
     });
+
+  // Captures the viewer never opened (a tab closed mid-handoff) expire here too.
+  sweep().catch((err) => console.warn("[scholar-reader] inbox sweep failed", err));
 }

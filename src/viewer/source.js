@@ -8,6 +8,8 @@
 // as any other — identity is the sha256 of those bytes, so a paper opened
 // locally shares its cache, its consent and its reading position with the same
 // paper fetched from arXiv.
+import { claim } from "../store/inbox.js";
+
 // Anything past this is almost certainly not a paper, and reading it whole into
 // memory to find that out would hang the tab first.
 export const MAX_LOCAL_BYTES = 512 * 1024 * 1024;
@@ -47,12 +49,34 @@ export async function fetchPdf(url) {
   return new Uint8Array(await response.arrayBuffer());
 }
 
+/** @returns {string|null} the interceptor's `?capture=` inbox token, when there is one */
+export function captureToken(search = window.location.search) {
+  return new URLSearchParams(search).get("capture") || null;
+}
+
 /**
+ * The bytes the background captured from the browser's own response when there
+ * are some; otherwise the URL is fetched here. The fetch is the fallback, not an
+ * equal: for a single-use publisher link it is the request that gets refused.
+ *
  * @param {string} url
- * @returns {Promise<{bytes: Uint8Array, name: string, url: string, local: false}>}
+ * @param {string|null} [token]
+ * @returns {Promise<{bytes: Uint8Array, name: string, url: string, local: false, timing: object}>}
  */
-export async function fromUrl(url) {
-  return { bytes: await fetchPdf(url), name: nameOf(url), url, local: false };
+export async function fromUrl(url, token = null) {
+  const timing = { viewerStart: Date.now() };
+  let entry = null;
+  if (token) {
+    try {
+      entry = await claim(token);
+    } catch (err) {
+      console.warn("[scholar-reader] the captured PDF could not be read; fetching it instead", err);
+    }
+    if (!entry) console.warn("[scholar-reader] no captured PDF for this tab (expired?); fetching it instead");
+  }
+  const bytes = entry ? new Uint8Array(entry.bytes) : await fetchPdf(url);
+  Object.assign(timing, entry?.timing, { path: entry ? "capture" : "fetch", bytesInHand: Date.now() });
+  return { bytes, name: nameOf(url), url, local: false, timing };
 }
 
 /**

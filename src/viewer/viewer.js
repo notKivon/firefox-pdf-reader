@@ -12,7 +12,8 @@ import { createDebugPane } from "./debug-pane.js";
 import { createOutlinePane } from "./outline-pane.js";
 import { trackReadingPosition } from "./reading-position.js";
 import { trackCurrentSection } from "./scroll-spy.js";
-import { fromFile, fromUrl, nameOf, nextPickedFile, requestedUrl } from "./source.js";
+import { captureToken, fromFile, fromUrl, nameOf, nextPickedFile, requestedUrl } from "./source.js";
+import { logTiming } from "./timing.js";
 
 const $ = (id) => document.getElementById(id);
 const els = {
@@ -139,13 +140,14 @@ async function main() {
   let doc;
   let hash;
   try {
-    source = url ? await fromUrl(url) : await pickLocal();
+    source = url ? await fromUrl(url, captureToken()) : await pickLocal();
     setDocumentTitle(source.name);
     // Hashed before loading: pdf.js may transfer the buffer to its worker and
     // leave it detached.
     hash = await sha256Hex(source.bytes);
     doc = await view.load(source.bytes);
     els.status.hidden = true;
+    logTiming(source);
   } catch (err) {
     console.error("[scholar-reader] load failed", err);
     showStatus("This PDF could not be opened", err.message, true);

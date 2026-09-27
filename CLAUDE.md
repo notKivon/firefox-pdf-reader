@@ -31,7 +31,8 @@ This file loads every session. Implementation detail is in **SPEC.md**; live bui
 ### PDF interception
 - The background script listens on `webRequest.onHeadersReceived` with `["blocking", "responseHeaders"]`, `types: ["main_frame"]`.
 - A response is treated as a PDF when its `Content-Type` header matches `/application\/pdf/i`. **URL extension is never used as the trigger** — publisher and arXiv PDFs are served from extensionless URLs.
-- On match, redirect to `viewer.html?file=<encodeURIComponent(originalUrl)>`.
+- On match, the PDF is **captured, not fetched again** (changed 2026-09-27 at the user's request; it used to redirect and let the viewer refetch). A `webRequest.filterResponseData` StreamFilter keeps the browser's own response; the tab meanwhile shows a scriptless picture of the reader with a progress bar, written into that response under a CSP with `default-src 'none'`; the bytes go to the IndexedDB `inbox` store and the tab moves to `viewer.html?file=<encodeURIComponent(originalUrl)>&capture=<token>` with `loadReplace`. Reason: publishers that sign PDF links for one use and bot-check the rest (Elsevier's `pdfft`) refuse the second request with a 403. **Nothing executable is ever written into a publisher's page.**
+- The redirect to `viewer.html?file=<…>` (the viewer then fetches the URL) remains only as the fallback: no tab (`tabId < 0`), a 206, a `Content-Encoding` other than identity, no StreamFilter, or a capture that could not be handed over.
 - Firefox only permits redirecting `http:` and `https:` requests. `file://` PDFs are opened through an explicit "Open local file" control in the viewer instead.
 - A per-origin opt-out list in settings suppresses interception for listed hosts.
 

@@ -30,7 +30,7 @@ async function test(name, fn) {
 
 await test("an absent grant reads as ask, never as consent", async () => {
   assert.equal(await isConsented("nothing:was:ever:granted:1"), false);
-  assert.equal(idb.version(), 2, "the consents store arrives with database version 2");
+  assert.ok(idb.version() >= 2, "the consents store arrives with database version 2 and stays in later ones");
   assert.equal(await isConsented(undefined), false);
 });
 

@@ -1,5 +1,5 @@
 // Theme is per-profile, not per document: storage.local, dark by default.
-const THEME_KEY = "theme";
+export const THEME_KEY = "theme";
 
 const SVG_NS = "http://www.w3.org/2000/svg";
 
