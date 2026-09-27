@@ -74,6 +74,7 @@ manifest.json
 - `beginCapture(details, deps)` attaches the StreamFilter and returns the rewritten headers: `Content-Type: text/html; charset=utf-8`, the publisher's CSP and `Content-Disposition` dropped, `SKELETON_CSP` (`default-src 'none'; style-src 'unsafe-inline'; …`) added. `Content-Length` and caching headers are left alone.
 - `onstart` writes `skeletonHead`; each `ondata` buffers the chunk and appends at most one `<style>` progress rule per whole percent (per 256 KB with no length). Nothing scripted is ever written.
 - `onstop`: concatenate → `inbox.stash` → `openingRule` → `close` → `tabs.update(tabId, {url, loadReplace: true})`, retried without `loadReplace` if refused. An empty body, one over `MAX_CAPTURE_BYTES` (512 MB) or a failed stash navigates to the viewer **without** a token, so the viewer fetches the URL itself and surfaces any failure in its own error pane. `onerror` (tab closed, navigated away, network failure) navigates nowhere.
+- The viewer gets the bytes by sending the router `{type: "capture", token}` → `{entry}`, never by opening `store/inbox.js` itself: an extension page in a **container tab** has its own IndexedDB partition, and Zen workspaces use containers.
 - `store/inbox.js` entries are read, not consumed, so reloading the reader does not refetch a single-use link. They expire after `INBOX_TTL_MS` (1 h), swept on every stash and at background start.
 - The skeleton's colours are copied from `theme.css`; `capture.test.mjs` fails when they drift.
 

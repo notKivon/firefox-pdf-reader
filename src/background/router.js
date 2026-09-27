@@ -10,6 +10,7 @@ import { ProviderError } from "../model/errors.js";
 import { getProvider, PROVIDERS } from "../model/providers.js";
 import { getApiKey } from "../store/apikeys.js";
 import { isConsented } from "../store/consent.js";
+import { claim } from "../store/inbox.js";
 import { isCacheable, saveOutline } from "../store/outlines.js";
 import { status as quotaStatus } from "../store/quota.js";
 import { plan } from "./plan.js";
@@ -121,6 +122,10 @@ function handlers({ bypass }) {
           .map((id) => quotaStatus(id)),
       ),
     }),
+    // Captured PDF bytes, for the viewer tab they were captured for. Read here
+    // rather than by the viewer because a tab in a container (Zen workspaces use
+    // them) gets its own partition of IndexedDB and cannot see the background's.
+    capture: async (message) => ({ entry: await claim(message.token) }),
     // The escape hatch: the sending tab's next PDF opens in the browser's own
     // viewer. Only a tab may ask, and only for itself.
     bypass: async (_message, sender) => {

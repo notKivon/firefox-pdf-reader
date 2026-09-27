@@ -2,9 +2,11 @@
 //
 // The background captures a PDF out of the browser's own response (see
 // background/capture.js) and the viewer tab it then opens needs those bytes.
-// Both are extension pages on one origin, so they share this database: the
-// bytes cross by disk rather than as a message payload tens of megabytes long,
-// and they survive the event page being suspended in between.
+// The bytes wait here, in the background's own IndexedDB, so they survive the
+// event page being suspended before the viewer asks. The viewer asks through
+// the router's `capture` message and never opens this store itself: an
+// extension page in a container tab has its own partition of IndexedDB (seen
+// live in Zen, whose workspaces use containers) and would find it empty.
 //
 // An entry is read, not consumed: reloading the reader must not fall back to
 // fetching the URL again, because for the publishers this exists for (Elsevier's

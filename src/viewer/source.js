@@ -8,8 +8,6 @@
 // as any other — identity is the sha256 of those bytes, so a paper opened
 // locally shares its cache, its consent and its reading position with the same
 // paper fetched from arXiv.
-import { claim } from "../store/inbox.js";
-
 // Anything past this is almost certainly not a paper, and reading it whole into
 // memory to find that out would hang the tab first.
 export const MAX_LOCAL_BYTES = 512 * 1024 * 1024;
@@ -68,7 +66,11 @@ export async function fromUrl(url, token = null) {
   let entry = null;
   if (token) {
     try {
-      entry = await claim(token);
+      // Asked of the background, never read from IndexedDB here: in a container
+      // tab this page's IndexedDB is a separate partition and holds nothing.
+      const reply = await browser.runtime.sendMessage({ type: "capture", token });
+      if (reply?.error) throw new Error(reply.message ?? reply.error);
+      entry = reply?.entry ?? null;
     } catch (err) {
       console.warn("[scholar-reader] the captured PDF could not be read; fetching it instead", err);
     }

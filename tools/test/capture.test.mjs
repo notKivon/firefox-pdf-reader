@@ -15,14 +15,22 @@ globalThis.browser = {
     local: { get: async (keys) => Object.fromEntries([keys].flat().map((k) => [k, store[k]])), set: async (o) => Object.assign(store, o) },
     onChanged: { addListener() {} },
   },
-  runtime: { getURL: (p) => `moz-extension://id/${p}` },
+  runtime: {
+    getURL: (p) => `moz-extension://id/${p}`,
+    onMessage: { addListener: (fn) => { routerListener = fn; } },
+    // The viewer reaches the inbox only through the real router, as in Firefox.
+    sendMessage: async (message) => routerListener(message, { tab: { id: 4 } }),
+  },
 };
+let routerListener;
 
 const { beginCapture, canCapture, rewriteHeaders, contentLength, SKELETON_CSP, MAX_CAPTURE_BYTES } = await import("../../src/background/capture.js");
 const { skeletonHead, createProgress, openingRule, escapeHtml, TOKENS } = await import("../../src/background/skeleton.js");
 const { stash, claim, sweep, INBOX_TTL_MS } = await import("../../src/store/inbox.js");
 const { fromUrl, captureToken } = await import("../../src/viewer/source.js");
 const { timingLine } = await import("../../src/viewer/timing.js");
+const { registerRouter } = await import("../../src/background/router.js");
+registerRouter({ bypass: { grant: () => true } });
 
 let passed = 0;
 const results = [];
@@ -70,6 +78,8 @@ await test("the captured bytes reach the viewer unaltered, and the tab moves the
   const source = await fromUrl(details().url, token);
   assert.deepEqual(source.bytes, body);
   assert.equal(source.timing.path, "capture");
+  const viewerSources = ["source.js", "viewer.js"].map((f) => readFileSync(new URL(`../../src/viewer/${f}`, import.meta.url), "utf8"));
+  assert.ok(viewerSources.every((src) => !src.includes("store/inbox")), "the viewer never opens the inbox itself: a container tab's IndexedDB is a different partition");
   assert.ok(filter.closed);
   assert.ok(out.responseHeaders.some((h) => h.value === SKELETON_CSP));
 });
