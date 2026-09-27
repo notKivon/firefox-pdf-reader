@@ -80,7 +80,12 @@ the extension is loaded temporarily and **is lost on every browser restart**.
 1. `npm run build`
 2. Open `about:debugging#/runtime/this-firefox`
 3. **Load Temporary Add-on…** → select `dist/manifest.json`
-4. Reload after each rebuild with the **Reload** button on the extension's card
+4. Reload after each rebuild with the **Reload** button on the extension's card.
+   **Reload** re-reads the folder the add-on was loaded from, so a build made in
+   another checkout is not picked up. A Claude Code worktree builds into
+   `.claude/worktrees/<name>/dist/`, which the file picker hides because the
+   name starts with a dot: press **⌘⇧G** in the picker and paste the path, or
+   **⌘⇧.** to show hidden folders.
 
 Then, once per profile:
 
@@ -108,10 +113,17 @@ Permanent installation requires AMO *unlisted* signing. See below.
 4. When asked whether source code is needed, answer **Yes** and upload the
    source zip, because `dist/` is bundled by esbuild. Paste the reviewer notes
    below.
-5. Once it is signed, download the signed `.xpi` from Developer Hub → the add-on →
-   **Manage Status & Versions** → the version. In Zen,
-   remove the temporary copy from `about:debugging` if it is loaded, then go to
-   `about:addons` → ⚙ → **Install Add-on From File…**.
+5. Once it is signed, open Developer Hub → the add-on → **Manage Status &
+   Versions** → the version. **Clicking the signed `.xpi` link installs it
+   straight into the browser you are in**; no file is saved. That is enough for
+   this profile. Remove the temporary copy from `about:debugging` if one is loaded.
+6. To install it in another profile or browser, you need the file itself. Either
+   right-click the link → **Save Link As…**, or copy it out of the profile it was
+   installed into: `~/Library/Application Support/zen/Profiles/<profile>/extensions/scholar-reader@kevin.local.xpi`
+   is the signed file. Then, in the other browser: `about:addons` → ⚙ →
+   **Install Add-on From File…**, or drag the file onto the window. No AMO
+   sign-in is needed. A fresh profile needs the Gemini key entered in settings,
+   and unlisted add-ons never update themselves, so repeat this for each release.
 
 Reviewer notes:
 
