@@ -45,9 +45,9 @@ src/
     prompts.js       PROMPT_VERSION + prompt builders + JSON schema
   store/
     db.js            IndexedDB open/upgrade
-    docs.js          document records, reading position
+    docs.js          document records, reading position (background only)
     outlines.js      outline cache, cache key construction
-    consent.js       per-cache-key send consent records
+    consent.js       per-cache-key send consent records (background only)
     quota.js         per-provider request counters keyed by Pacific date
     apikeys.js       provider keys in storage.local, read only by the background
     settings.js      provider order and origin opt-out list, normalised
@@ -79,7 +79,12 @@ manifest.json
 - The skeleton's colours are copied from `theme.css`; `capture.test.mjs` fails when they drift.
 
 ## background/router.js
-- `runtime.onMessage` handles `{type: "outline", hash, sections, meta}`, `{type: "plan", hash, sections, meta}` and `{type: "quota"}`.
+- `runtime.onMessage` handles `{type: "outline", hash, sections, meta}`, `{type: "plan", hash, sections, meta}` and `{type: "quota"}`, plus `capture`, `bypass`, and the record handlers in `background/records.js`:
+  - `{type: "grant", hash, providerId, cacheKey}` → `{ok}`. The router derives the key and the model/destination from the descriptor itself, and refuses when the key the card showed is not the one it derives.
+  - `{type: "open-doc", hash, url, meta}` → `{title, pageCount, position}`. `meta` is computed in the viewer (`viewer/doc-meta.js`, which also owns `sha256Hex`); only `title`, `authors`, `pageCount`, `arxivId`, `doi` are taken from it.
+  - `{type: "save-position", hash, position: {page, scrollTop, scrollHeight}}` → `{ok}`.
+  - `{type: "consents"}` → `{consents, docs}` and `{type: "revoke", hash}` / `{type: "revoke", all: true}` → `{count}`, for the settings page.
+- **One IndexedDB partition: the background's.** No page (viewer or settings) imports an IndexedDB-backed store — `db`, `docs`, `consent`, `inbox`, `outlines`, `quota` — directly or transitively. An extension page in a **container tab** (Zen workspaces use them) has its own IndexedDB partition, so a grant written there is one the gate never sees. `partition.test.mjs` walks both pages' import graphs and fails otherwise. `storage.local` is per extension, not per container, so `apikeys.js` and `settings.js` may still be read by pages. Pages call the router through `viewer/ask.js`, which turns an `{error, message}` reply back into a throw.
 - `plan` is the confirmation's data source: it resolves the provider, builds the cache key, checks the cache and the consent record, and returns `{cacheHit, consented, cacheKey, providerId, model, destination, label, strategy, sectionCount, chars, estTokens, estCost}` **without making any network request**. The viewer renders either the outline (cache hit), the confirm card (no consent), or the spinner (consented already).
 - `outline` **refuses to call a provider unless `store/consent.js` holds a record for the cache key it is about to use** — the check is here, not in the viewer, per CLAUDE.md's send-confirmation rule. Refusal returns `{error: "consent-required", plan}` so the pane can render the card rather than an error.
 - A fallback that would change `destination` mid-run aborts with `{error: "consent-required", plan}` for the new destination instead of sending.

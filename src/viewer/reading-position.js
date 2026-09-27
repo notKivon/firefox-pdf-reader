@@ -1,7 +1,10 @@
 // Restoring and saving where the reader left off. Its own module because the
 // viewer entry point is at the 200-line limit, and this is one responsibility:
 // the reading position, and nothing about the outline or the document record.
-import { saveReadingPosition } from "../store/docs.js";
+// Saved through the router rather than the store: a reader tab in a container
+// has its own partition of IndexedDB, and a position saved there would be lost
+// to the same paper opened in any other tab.
+import { ask } from "./ask.js";
 
 const SAVE_DEBOUNCE_MS = 600;
 
@@ -27,7 +30,7 @@ function debounce(fn, ms) {
 // Restores where the reader left off, then keeps the record up to date.
 export function trackReadingPosition({ view, hash, container, position, onNote }) {
   const save = debounce(() => {
-    saveReadingPosition(hash, view.position()).catch((err) => {
+    ask({ type: "save-position", hash, position: view.position() }).catch((err) => {
       console.warn("[scholar-reader] reading position not saved", err);
       onNote?.(`Reading position is not being saved: ${err.message}`);
     });

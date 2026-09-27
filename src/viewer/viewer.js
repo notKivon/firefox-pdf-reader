@@ -3,7 +3,8 @@ import { createPdfView } from "./pdfview.js";
 import { initTheme } from "./theme.js";
 import { initPaneResize } from "./pane-resize.js";
 import { createToolbarFields } from "./toolbar-fields.js";
-import { recordOpen, readingPosition, sha256Hex } from "../store/docs.js";
+import { ask } from "./ask.js";
+import { readDocumentMeta, sha256Hex } from "./doc-meta.js";
 import { charsPerPage, extractPages, modalFontName } from "../extract/textlayer.js";
 import { layoutDocument } from "../extract/columns.js";
 import { extractSections } from "../extract/sections.js";
@@ -185,13 +186,14 @@ async function main() {
   const extraction = runExtraction(debugPane, doc);
 
   // Identity and history are a separate failure domain from rendering: a broken
-  // IndexedDB must not cost the reader the paper.
+  // IndexedDB must not cost the reader the paper. Stored by the background, whose
+  // partition every tab shares — a container tab has its own.
   let meta = { title: source.name, pageCount: doc.numPages };
   try {
-    const record = await recordOpen({ hash, url: source.url, pdfDoc: doc });
+    const record = await ask({ type: "open-doc", hash, url: source.url, meta: await readDocumentMeta(doc, source.url) });
     setDocumentTitle(record.title);
     meta = { title: record.title, pageCount: record.pageCount };
-    trackReadingPosition({ view, hash, container: els.container, position: readingPosition(record), onNote: showNote });
+    trackReadingPosition({ view, hash, container: els.container, position: record.position, onNote: showNote });
   } catch (err) {
     console.error("[scholar-reader] document store unavailable", err);
     showNote(`Reading position and outlines cannot be stored: ${err.message}`);

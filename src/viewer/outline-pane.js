@@ -4,12 +4,12 @@
 // The order of the send is the whole point of the first three: `plan` first —
 // which makes no network request — then the card, then the grant, and only then
 // the send. Rendering the outline itself belongs to `outline-list.js`.
+import { ask } from "./ask.js";
 import { confirmCard } from "./confirm-card.js";
 import { el } from "./el.js";
 import { errorBox } from "./pane-error.js";
 import { outlineList } from "./outline-list.js";
 import { providerSwitch } from "./provider-switch.js";
-import { grantConsent } from "../store/consent.js";
 
 // Sections carry their body lines so a bullet can be located against the paper
 // (locate.js). Those lines never leave this page: the router builds the model
@@ -111,11 +111,13 @@ export function createOutlinePane({ root, onJump, onSections, onReady }) {
 
   // The grant is written before anything is sent, so a crash mid-request cannot
   // lose it and ask again. If it cannot be written, nothing is sent: a consent
-  // that is not remembered is not the consent CLAUDE.md specifies.
+  // that is not remembered is not the consent CLAUDE.md specifies. The router
+  // writes it, not this page: a reader tab in a container has its own partition
+  // of IndexedDB, and a grant written there is one the gate never sees.
   async function confirm(detail) {
     showMessage("Starting…");
     try {
-      await grantConsent(detail);
+      await ask({ type: "grant", hash: detail.hash, providerId: detail.providerId, cacheKey: detail.cacheKey });
     } catch (err) {
       console.error("[scholar-reader] consent not stored", err);
       showError(`Your approval could not be stored, so nothing was sent: ${err.message}`, {

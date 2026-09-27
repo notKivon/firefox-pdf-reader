@@ -14,6 +14,7 @@ import { claim } from "../store/inbox.js";
 import { isCacheable, saveOutline } from "../store/outlines.js";
 import { status as quotaStatus } from "../store/quota.js";
 import { plan } from "./plan.js";
+import { recordHandlers } from "./records.js";
 import { createWatchdog } from "./watchdog.js";
 
 export { plan };
@@ -112,6 +113,10 @@ async function cache(hash, result) {
 /** @param {{bypass: {grant(tabId: number): boolean}}} deps */
 function handlers({ bypass }) {
   return {
+    // Document records, reading positions and consents: see records.js for why
+    // no page reads or writes them itself. The consent gate stays below, in
+    // runOutline, which re-reads the store whatever a page has said.
+    ...recordHandlers(),
     plan: (message) => plan(message),
     outline: (message, sender) => runOutline(message, sender.tab?.id),
     // Read-only: what today's counters stand at, for the settings page.
