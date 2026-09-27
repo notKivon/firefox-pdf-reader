@@ -17,11 +17,18 @@ import { el } from "./el.js";
  * @param {() => void} [options.retry]
  * @param {object} [options.plan] the router's plan, for its `alternatives`
  * @param {(id: string) => void} [options.onPickProvider]
+ * @param {string} [options.details] plain text behind a "Details" disclosure —
+ *   what the reader can copy when the message alone does not explain it
  * @returns {HTMLElement}
  */
-export function errorBox(text, { retry, plan, onPickProvider } = {}) {
+export function errorBox(text, { retry, plan, onPickProvider, details } = {}) {
   const box = el("div", "outline-error");
   box.append(el("p", "pane-error", text));
+  if (details) {
+    const more = el("details", "pane-error-details");
+    more.append(el("summary", null, "Details"), el("pre", "pane-error-text", details));
+    box.append(more);
+  }
 
   if (retry) {
     const button = el("button", "confirm-go", "Try again");

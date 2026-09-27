@@ -6,10 +6,11 @@
 // the send. Rendering the outline itself belongs to `outline-list.js`.
 import { ask } from "./ask.js";
 import { confirmCard } from "./confirm-card.js";
+import { describeFailure } from "./diagnostics.js";
 import { el } from "./el.js";
 import { errorBox } from "./pane-error.js";
 import { outlineList } from "./outline-list.js";
-import { providerSwitch } from "./provider-switch.js";
+import { readyBox } from "./outline-ready.js";
 
 // Sections carry their body lines so a bullet can be located against the paper
 // (locate.js). Those lines never leave this page: the router builds the model
@@ -28,6 +29,7 @@ const forSending = (sections) => sections.map(({ lines, ...rest }) => rest);
  */
 export function createOutlinePane({ root, onJump, onSections, onReady }) {
   let current = null; // {hash, sections, meta, providerId, label}
+  let granted = null; // the cache key this page last had the router record
   let list = null; // the rendered outline, while one is on screen
 
   // Every state change drops the outline, so the spy is told before anything can
@@ -44,39 +46,19 @@ export function createOutlinePane({ root, onJump, onSections, onReady }) {
 
   // Every failure state, including the ones the reader can be stranded in: see
   // pane-error.js for why the alternatives travel with them.
-  function showError(text, { retry, plan } = {}) {
-    show(errorBox(text, { retry, plan, onPickProvider: (id) => replan(id).catch(reportFailure) }));
+  function showError(text, { retry, plan, details } = {}) {
+    show(errorBox(text, { retry, plan, details, onPickProvider: (id) => replan(id).catch(reportFailure) }));
   }
 
-  // The finished outline. It names `result.model` rather than the provider that
-  // was asked: fallback may have moved the run, and the reader should see who
-  // actually answered. A cache hit says so too — it is the reader's evidence
-  // that this open sent nothing anywhere.
+  // The finished outline, fresh or cached: see outline-ready.js.
   function showReady(result) {
-    const rendered = outlineList(result, {
+    const { node, rendered } = readyBox(result, {
       onJump,
-      // Located from the live extraction every open, so a cached outline needs
-      // no migration and nothing about a bullet's position is ever stored.
       linesFor: (index) => current?.sections?.[index]?.lines,
+      plan: current?.plan,
+      onPickProvider: (id) => replan(id).catch(reportFailure),
     });
-    const box = el("div", "outline-ready");
-    box.append(rendered.node);
-    if (result.model) {
-      const source = result.cacheHit
-        ? `Outlined by ${result.model}, from this document's cache — nothing was sent.`
-        : `Outlined by ${result.model}.`;
-      box.append(el("p", "outline-source", source));
-    }
-    // Non-fatal: the outline is on screen either way, and the only consequence
-    // is another run next time. Saying so beats silence.
-    if (result.warning) box.append(el("p", "pane-note", result.warning));
-    // A finished outline is not the end of the reader's choices. Re-planning
-    // under another model is a different cache key, so it renders from that
-    // model's cache if it has one and asks for its own confirmation if not —
-    // crossing to the local model included.
-    const switcher = providerSwitch(current?.plan, (id) => replan(id).catch(reportFailure));
-    if (switcher) box.append(switcher);
-    show(box);
+    show(node);
     list = rendered;
     onSections?.(rendered.targets);
     onReady?.();
@@ -118,11 +100,13 @@ export function createOutlinePane({ root, onJump, onSections, onReady }) {
     showMessage("Starting…");
     try {
       await ask({ type: "grant", hash: detail.hash, providerId: detail.providerId, cacheKey: detail.cacheKey });
+      granted = detail.cacheKey;
     } catch (err) {
       console.error("[scholar-reader] consent not stored", err);
       showError(`Your approval could not be stored, so nothing was sent: ${err.message}`, {
         retry: () => confirm(detail),
         plan: detail,
+        details: await describeFailure({ "Approving": detail.cacheKey, "Error": String(err?.message ?? err) }),
       });
       return;
     }
@@ -141,8 +125,18 @@ export function createOutlinePane({ root, onJump, onSections, onReady }) {
       meta: current.meta,
       providerId: detail.providerId,
     });
-    // The router refused: either the grant never landed or this is a different
-    // key than the one granted. Either way the card, not an error, is the answer.
+    // The router refused. Straight after this page's own approval of the same
+    // key, that is a fault — the grant did not land where the gate reads — and
+    // redrawing the card would look like a flicker with nothing to say why. Any
+    // other key is a different send, and the card is the answer.
+    if (result?.error === "consent-required" && result.plan?.cacheKey === granted) {
+      console.error("[scholar-reader] refused straight after approval", result);
+      return showError("Your approval was saved, but the background still found no approval for this send, so nothing was sent.", {
+        retry: () => confirm(detail).catch(reportFailure),
+        plan: detail,
+        details: await describeFailure({ "Approved": granted, "Router checked": result.plan.cacheKey, "Reply": result }),
+      });
+    }
     if (result?.error === "consent-required") {
       return show(
         confirmCard(result.plan, {
@@ -155,6 +149,7 @@ export function createOutlinePane({ root, onJump, onSections, onReady }) {
       return showError(result.message ?? "The outline could not be generated.", {
         retry: () => send(detail).catch(reportFailure),
         plan: detail,
+        details: await describeFailure({ "Sending": detail.cacheKey, "Reply": result }),
       });
     }
     showReady(result);
@@ -162,7 +157,12 @@ export function createOutlinePane({ root, onJump, onSections, onReady }) {
 
   function reportFailure(err) {
     console.error("[scholar-reader] outline pane failed", err);
-    showError(String(err?.message ?? err));
+    const text = String(err?.message ?? err);
+    showError(text);
+    // Filled in once known; the message is on screen either way.
+    describeFailure({ "Error": text, "Stack": err?.stack })
+      .then((details) => showError(text, { details }))
+      .catch(() => {});
   }
 
   // Progressive fill, under either strategy: the sections that have landed are

@@ -9,7 +9,7 @@
 // background's.
 import { getProvider } from "../model/providers.js";
 import { cacheKey } from "../store/cache-key.js";
-import { allConsents, grantConsent, revokeAll, revokeDocument } from "../store/consent.js";
+import { allConsents, grantConsent, isConsented, revokeAll, revokeDocument } from "../store/consent.js";
 import { getDoc, readingPosition, recordOpen, saveReadingPosition } from "../store/docs.js";
 
 const HASH_RE = /^[0-9a-f]{64}$/;
@@ -34,7 +34,10 @@ async function grant({ hash, providerId, cacheKey: shown }) {
     throw new Error("the approval was for a different send than the one this version would make. Reload the page and approve again.");
   }
   await grantConsent({ cacheKey: key, hash, providerId, model: provider.model, destination: provider.destination });
-  return { ok: true };
+  // Read back through the same check the gate uses, so a grant that did not
+  // stick is reported here, as a failure, rather than as a refusal later.
+  if (!(await isConsented(key))) throw new Error("the approval was written but could not be read back.");
+  return { ok: true, key };
 }
 
 async function openDoc({ hash, url, meta }) {

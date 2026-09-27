@@ -258,6 +258,40 @@ await test("a section's body lines never reach the wire", async () => {
   }
 });
 
+await test("a refusal straight after approving the same key is an error with details, not the card again", async () => {
+  // The container bug's symptom: the grant landed where the gate does not read,
+  // and redrawing the card looked like a flicker with nothing to say why.
+  const sent = stubBrowser((message) => {
+    if (message.type === "plan") return PLAN;
+    if (message.type === "grant") return { ok: true, key: PLAN.cacheKey };
+    return { error: "consent-required", plan: PLAN };
+  });
+  const root = new FakeNode("div");
+  createOutlinePane({ root }).start(DOC);
+  await settle();
+  root.find("confirm-go").click();
+  for (let i = 0; i < 10; i++) await settle();
+  assert.deepEqual(sent.map((m) => m.type), ["plan", "grant", "outline"]);
+  assert.equal(root.find("confirm-card"), null, "not the card again");
+  assert.ok(root.find("pane-error").textContent.includes("approval was saved"), root.textContent);
+  const details = root.find("pane-error-text").textContent;
+  assert.ok(details.includes(`Approved: ${PLAN.cacheKey}`), details);
+  assert.ok(details.includes("consent-required"), "the router's reply is in the details");
+  assert.ok(details.includes("(Hong Kong)"), "times render in Hong Kong");
+  assert.ok(!details.includes("sectionTitles"), "the plan is trimmed to what identifies it");
+});
+
+await test("a failed send carries the router's reply in its details", async () => {
+  stubBrowser((message) =>
+    message.type === "plan" ? { ...PLAN, consented: true } : { error: "auth", message: "No API key is stored for Gemini 3.8 Flash." },
+  );
+  const root = new FakeNode("div");
+  createOutlinePane({ root }).start(DOC);
+  for (let i = 0; i < 10; i++) await settle();
+  assert.ok(root.find("pane-error").textContent.includes("No API key"));
+  assert.ok(root.find("pane-error-text").textContent.includes('"error": "auth"'));
+});
+
 console.log(results.join("\n"));
 console.log(`\n${passed}/${results.length} passed`);
 process.exit(passed === results.length ? 0 : 1);
