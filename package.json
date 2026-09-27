@@ -1,6 +1,6 @@
 {
   "name": "scholar-reader",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "private": true,
   "type": "module",
   "description": "Two-pane academic PDF reader for Firefox/Zen: paper left, AI section outline right.",

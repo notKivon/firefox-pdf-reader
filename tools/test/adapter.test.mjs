@@ -3,6 +3,7 @@ import { readFileSync, readdirSync } from "node:fs";
 import { outline } from "../../src/model/adapter.js";
 import { ProviderError } from "../../src/model/errors.js";
 import { completeSections } from "../../src/model/partial-json.js";
+import { normaliseTitle } from "../../src/model/align.js";
 import { installFetch, goodAnswer, titlesFrom, rateLimited, sse, contentChunks } from "./stub.mjs";
 import { installIndexedDb } from "./idb.mjs";
 
@@ -134,6 +135,11 @@ await reject("a section retitled", (body) => {
   answer.sections[4].title = "Something Else Entirely";
   return answer;
 }, /came back as/);
+
+await test("an unmappable glyph (U+FFFD) the model drops still matches its title", () => {
+  assert.equal(normaliseTitle("1 − α \uFFFDf(wt,rt)≥αβ(wt)"), normaliseTitle("1 − α f(wt,rt)≥αβ(wt)"));
+  assert.notEqual(normaliseTitle("\uFFFD Method"), normaliseTitle("Results"));
+});
 
 await reject("sections reordered", (body) => {
   const answer = goodAnswer(body);

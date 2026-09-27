@@ -16,8 +16,12 @@ import { ProviderError } from "./errors.js";
 // model is sent plain letters — but a model that renders `3 Method` back as
 // math-italic would otherwise fail the checksum, and that failure is fatal to
 // the whole response. Folding it costs nothing: `𝟑` and `3` are the same title.
+//
+// U+FFFD is dropped for the same reason: it marks a glyph pdf.js could not map,
+// so it carries no text, and a model echoing the title silently leaves it out.
 export function normaliseTitle(title) {
   return normalizeText(String(title ?? ""))
+    .replace(/�/g, "")
     .toLowerCase()
     .replace(/\s+/g, " ")
     .trim()
