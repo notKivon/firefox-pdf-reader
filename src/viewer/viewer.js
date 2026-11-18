@@ -9,6 +9,7 @@ import { charsPerPage, extractPages, modalFontName } from "../extract/textlayer.
 import { layoutDocument } from "../extract/columns.js";
 import { extractSections } from "../extract/sections.js";
 import { initActions } from "./actions.js";
+import { initDownload } from "./download.js";
 import { createDebugPane } from "./debug-pane.js";
 import { createOutlinePane } from "./outline-pane.js";
 import { trackReadingPosition } from "./reading-position.js";
@@ -41,6 +42,7 @@ const els = {
   openLocal: $("open-local"),
   nativeViewer: $("native-viewer"),
   settings: $("open-settings"),
+  download: $("download-pdf"),
 };
 
 function showStatus(title, detail = "", isError = false) {
@@ -113,6 +115,7 @@ async function main() {
   // every page and move the reading position just restored.
   await Promise.all([initTheme(els.theme), initPaneResize({ handle: els.resizer, pane: els.pane })]);
   const actions = initActions({ ...els, onNote: showNote });
+  const download = initDownload({ button: els.download, onNote: showNote });
 
   const url = requestedUrl();
   let source;
@@ -159,6 +162,7 @@ async function main() {
     return;
   }
   actions.setSource(source);
+  download.setDocument(doc, { title: source.name, url: source.url });
 
   // The two halves of section jumping, and each needs the other: the pane sends
   // the reader to a place in the paper, and where the reader is sends the pane
@@ -192,6 +196,7 @@ async function main() {
   try {
     const record = await ask({ type: "open-doc", hash, url: source.url, meta: await readDocumentMeta(doc, source.url) });
     setDocumentTitle(record.title);
+    download.setTitle(record.title);
     meta = { title: record.title, pageCount: record.pageCount };
     trackReadingPosition({ view, hash, container: els.container, position: record.position, onNote: showNote });
   } catch (err) {

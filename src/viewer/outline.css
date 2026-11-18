@@ -7,20 +7,20 @@
 .confirm-card {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 9px;
   margin: 0 0 16px;
-  padding: 12px;
+  padding: 14px 14px 16px;
   border: 1px solid var(--border);
-  border-radius: 8px;
+  border-radius: 10px;
   background: var(--bg-raised);
 }
 
 .confirm-heading {
   margin: 0;
-  font-size: 13px;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  color: var(--text-dim);
+  font-family: var(--serif);
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--text);
 }
 
 .confirm-doc {
@@ -73,14 +73,25 @@
 }
 
 .confirm-go {
-  padding: 8px 12px;
+  padding: 8px 14px;
   border: 1px solid var(--accent);
   border-radius: 6px;
   background: var(--accent);
-  color: var(--bg);
+  color: var(--accent-ink);
   font: inherit;
   font-weight: 600;
   cursor: pointer;
+}
+
+.confirm-go:hover:not(:disabled) {
+  filter: brightness(1.08);
+}
+
+.confirm-go:focus-visible,
+.confirm-alt-go:focus-visible,
+.outline-switch-go:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
 }
 
 .confirm-go:disabled {
@@ -150,47 +161,59 @@
 
 /* --- The outline itself (step 9) --- */
 
+/* The whole paper in two sentences, set as the lede of the notes rather than
+   boxed as a card: it is the first thing to read, not a widget beside it. */
 .outline-tldr {
-  margin: 0 0 10px;
-  padding: 9px 11px;
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  background: var(--bg-raised);
+  margin: 2px 0 14px;
+  padding: 0 0 14px 2.9em;
 }
 
 .outline-tldr-label {
-  margin: 0 0 4px;
-  font-size: 11px;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: var(--text-dim);
+  margin: 0 0 3px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--accent);
 }
 
 .outline-tldr-text {
   margin: 0;
+  font-family: var(--serif);
+  font-size: 15.5px;
+  font-style: italic;
+  line-height: 1.5;
+  color: var(--text);
 }
 
 /* The marker for the section being read sits in the gutter rather than on a
    border, so a section does not change size when it becomes the current one. */
+/* Set like notes in a margin: the page number hangs in its own gutter column,
+   so titles and bullets share one left edge and the numbers read down the side
+   as an index. The current section's number turns brass and a brass rule runs
+   beside it — in the gutter, so the section never changes size. */
 .outline-section {
   position: relative;
-  padding: 8px 0 10px 10px;
+  padding: 10px 0 12px 2.9em;
   border-top: 1px solid var(--border);
 }
 
 .outline-section::before {
   content: "";
   position: absolute;
-  left: 0;
-  top: 7px;
-  bottom: 7px;
+  left: 2.15em;
+  top: 12px;
+  bottom: 12px;
   width: 2px;
   border-radius: 2px;
   background: transparent;
+  transition: background 0.15s;
 }
 
 .outline-section.is-current::before {
   background: var(--accent);
+}
+
+.outline-section.is-current .outline-page {
+  color: var(--accent);
 }
 
 /* Not a <button>: the reader has to be able to select and copy this text, and
@@ -201,6 +224,9 @@
   gap: 7px;
   width: 100%;
   color: var(--text);
+  font-family: var(--serif);
+  font-size: 14.5px;
+  line-height: 1.35;
   font-weight: 600;
   text-align: left;
   cursor: pointer;
@@ -219,10 +245,17 @@
 }
 
 .outline-page {
-  flex: 0 0 auto;
+  position: absolute;
+  left: 0;
+  width: 1.75em;
+  text-align: right;
   color: var(--text-dim);
-  font-weight: 400;
+  font-family: system-ui, -apple-system, sans-serif;
+  font-size: 11.5px;
+  font-weight: 500;
+  line-height: 1.35rem;
   font-variant-numeric: tabular-nums;
+  transition: color 0.15s;
 }
 
 .outline-title-text {
@@ -231,7 +264,7 @@
 }
 
 .outline-bullets {
-  margin: 5px 0 0;
+  margin: 6px 0 0;
   padding: 0;
   list-style: none;
 }
@@ -241,24 +274,33 @@
    for reading and quoting. See .outline-title above. */
 .outline-bullet-go {
   display: flex;
-  gap: 7px;
+  gap: 8px;
   width: 100%;
-  padding: 2px 4px 2px 0;
-  border-radius: 4px;
+  margin: 0 0 0 -6px;
+  padding: 3px 6px;
+  border-radius: 5px;
+  font-family: var(--serif);
+  font-size: 14px;
+  line-height: 1.5;
   color: var(--text);
   text-align: left;
   cursor: pointer;
   user-select: text;
 }
 
+/* A short rule rather than a dot: quieter on a page of them, and it lines up
+   with the brass rule in the gutter when the bullet's own lines were found. */
 .outline-bullet-go::before {
-  content: "\2022";
-  flex: 0 0 auto;
-  color: var(--text-dim);
+  content: "";
+  flex: 0 0 7px;
+  height: 1.5px;
+  margin-top: 0.75em;
+  background: var(--text-dim);
+  opacity: 0.6;
 }
 
 .outline-bullet-go:hover {
-  background: var(--bg-raised);
+  background: var(--bg-hover);
 }
 
 /* A section that failed and a section with nothing in it must never look the
@@ -270,7 +312,8 @@
 
 .outline-section-empty,
 .outline-section-pending {
-  margin: 5px 0 0;
+  margin: 6px 0 0;
+  font-family: var(--serif);
   color: var(--text-dim);
   font-style: italic;
 }
@@ -309,8 +352,16 @@
   cursor: pointer;
 }
 
-.outline-switch-go:hover {
+.outline-switch-go:hover,
+.confirm-alt-go:hover {
   border-color: var(--accent);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .outline-section::before,
+  .outline-page {
+    transition: none;
+  }
 }
 
 /* A bullet whose own sentences were found in the paper jumps to them rather
@@ -318,5 +369,6 @@
    better jump, not a different kind of thing, and a bullet without it still
    works exactly as it always did. */
 .outline-bullet-go.is-located::before {
-  color: var(--accent);
+  background: var(--accent);
+  opacity: 1;
 }

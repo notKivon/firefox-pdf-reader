@@ -16,8 +16,8 @@ import { MIN_OUTLINE, MIN_PDF } from "../viewer/pane-resize.js";
 // Copied from theme.css, which is the source of truth; tools/test/capture.test.mjs
 // fails if these drift from it.
 export const TOKENS = {
-  dark: { bg: "#16181d", bgRaised: "#1d2026", bgSunken: "#0f1115", border: "#2b2f38", text: "#e6e8ee", textDim: "#98a0b0", accent: "#7aa2f7" },
-  light: { bg: "#f4f5f7", bgRaised: "#ffffff", bgSunken: "#e7e9ee", border: "#d3d7e0", text: "#1b1e24", textDim: "#5c6472", accent: "#2f5fd0" },
+  dark: { bg: "#121a17", bgRaised: "#18221e", bgSunken: "#0c120f", border: "#26332d", text: "#e4e6df", textDim: "#8d9a92", accent: "#d4a94f" },
+  light: { bg: "#f3f4f0", bgRaised: "#ffffff", bgSunken: "#e2e5de", border: "#d2d7cd", text: "#1a211d", textDim: "#59655e", accent: "#8a6416" },
 };
 
 const MB = 1024 * 1024;
