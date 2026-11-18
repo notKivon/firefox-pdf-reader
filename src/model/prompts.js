@@ -18,13 +18,31 @@ const RULES = [
   "Echo the value of each section's Title field back exactly as given, character for character, including its numbering. Never answer with any other text as the title.",
 ].map((rule) => `- ${rule}`).join("\n");
 
-const SYSTEM = `You summarise sections of an academic paper for a researcher skimming it.
+const STRICT = `You summarise sections of an academic paper for a researcher skimming it.
 
 ${RULES}
 
 Answer with JSON only, matching the supplied schema.`;
 
-const TLDR_RULE = "Also write a TL;DR for the whole paper: at most 2 sentences, extractive, no hedging.";
+// For models that do not need the limits spelled out (promptStyle
+// "guidelines" in providers.js — Opus and Sonnet). Changed 2026-11-18 at the
+// user's request: judgement over hard counts. Two lines stay firm because they
+// are correctness, not style — the echoed title is the alignment checksum, and
+// the answer is decoded against the schema. Editing this text means bumping
+// PROMPT_VERSION, the same as the strict text.
+const GUIDELINES = `You are writing a section-by-section outline of an academic paper for a researcher who wants to skim it and jump to what matters.
+
+Use your judgement on how many bullets each section deserves and how long they are: a short section may need one, a dense one several. Aim for something scannable. Stay faithful to what the paper says rather than evaluating it, keep the figures a results section reports, and leave out the reference list, acknowledgements and funding.
+
+Two things are fixed: echo each section's Title field back exactly as given, character for character, and answer with JSON only, matching the supplied schema.`;
+
+const system = (style) => (style === "guidelines" ? GUIDELINES : STRICT);
+
+const TLDR_RULES = {
+  strict: "Also write a TL;DR for the whole paper: at most 2 sentences, extractive, no hedging.",
+  guidelines: "Also write a brief TL;DR of the whole paper.",
+};
+const tldrRule = (style) => TLDR_RULES[style === "guidelines" ? "guidelines" : "strict"];
 
 const plural = (n) => `${n} ${n === 1 ? "section" : "sections"}`;
 
@@ -40,11 +58,11 @@ function sectionBlock(section, index, { ordinal = true } = {}) {
 }
 
 /** One request carrying the whole paper. Used by `whole-document` providers. */
-export function wholeDocumentMessages(sections, meta = {}) {
+export function wholeDocumentMessages(sections, meta = {}, style = "strict") {
   const header = meta.title ? `Paper: ${meta.title}\n\n` : "";
   const body = sections.map(sectionBlock).join("\n\n");
   return [
-    { role: "system", content: `${SYSTEM}\n\n${TLDR_RULE}` },
+    { role: "system", content: `${system(style)}\n\n${tldrRule(style)}` },
     {
       role: "user",
       content:
@@ -55,10 +73,10 @@ export function wholeDocumentMessages(sections, meta = {}) {
 }
 
 /** One section per request. Used by `per-section` providers. */
-export function sectionMessages(section, meta = {}) {
+export function sectionMessages(section, meta = {}, style = "strict") {
   const header = meta.title ? `Paper: ${meta.title}\n\n` : "";
   return [
-    { role: "system", content: SYSTEM },
+    { role: "system", content: system(style) },
     {
       role: "user",
       content:
@@ -72,16 +90,16 @@ export function sectionMessages(section, meta = {}) {
  * The reduce step for `per-section`: a TL;DR written from the bullets, since no
  * single request in that strategy ever saw the whole paper.
  */
-export function tldrMessages(sections, meta = {}) {
+export function tldrMessages(sections, meta = {}, style = "strict") {
   const header = meta.title ? `Paper: ${meta.title}\n\n` : "";
   const digest = sections
     .map((section) => `${section.title}\n${section.bullets.map((b) => `- ${b}`).join("\n")}`)
     .join("\n\n");
   return [
-    { role: "system", content: `${SYSTEM}\n\n${TLDR_RULE}` },
+    { role: "system", content: `${system(style)}\n\n${tldrRule(style)}` },
     {
       role: "user",
-      content: `${header}These are the section summaries of one paper. ${TLDR_RULE}\n\n${digest}`,
+      content: `${header}These are the section summaries of one paper. ${tldrRule(style)}\n\n${digest}`,
     },
   ];
 }
@@ -91,18 +109,17 @@ export function tldrMessages(sections, meta = {}) {
 // count and the bullet count — but see PROGRESS.md: whether Gemini's
 // OpenAI-compatibility layer honours those two keywords is verified by a real
 // call, and the adapter's own checks stand regardless of the answer.
-const bulletsSchema = {
-  type: "array",
-  minItems: 2,
-  maxItems: 4,
-  items: { type: "string" },
-};
+const bulletsSchema = (style) =>
+  style === "guidelines"
+    ? { type: "array", minItems: 1, items: { type: "string" } }
+    : { type: "array", minItems: 2, maxItems: 4, items: { type: "string" } };
 
 /**
  * @param {number} sectionCount sections sent, pinned as both min and max
- * @param {{tldr?: boolean}} [options] `per-section` requests carry no TL;DR
+ * @param {{tldr?: boolean, style?: string}} [options] `per-section` requests
+ *   carry no TL;DR; `style` is the provider's promptStyle
  */
-export function outlineSchema(sectionCount, { tldr = true } = {}) {
+export function outlineSchema(sectionCount, { tldr = true, style = "strict" } = {}) {
   const properties = {
     sections: {
       type: "array",
@@ -110,7 +127,7 @@ export function outlineSchema(sectionCount, { tldr = true } = {}) {
       maxItems: sectionCount,
       items: {
         type: "object",
-        properties: { title: { type: "string" }, bullets: bulletsSchema },
+        properties: { title: { type: "string" }, bullets: bulletsSchema(style) },
         required: ["title", "bullets"],
         additionalProperties: false,
       },

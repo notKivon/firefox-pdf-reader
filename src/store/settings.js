@@ -38,6 +38,14 @@ export function normalizeOrder(stored) {
       order.push(id);
     }
   }
+  // An order saved before the Claude providers existed (step 21) was a choice
+  // among Gemini and Ollama, not a choice against Opus. The reader asked for
+  // Opus as the default, so such an order gets it in front; once any Claude id
+  // is in a saved order, wherever the reader put it stands.
+  if (order.length && !order.some((id) => PROVIDERS[id].bridge)) {
+    seen.add(DEFAULT_PROVIDER_ID);
+    order.unshift(DEFAULT_PROVIDER_ID);
+  }
   for (const id of DEFAULT_ORDER) if (!seen.has(id)) order.push(id);
   return order;
 }

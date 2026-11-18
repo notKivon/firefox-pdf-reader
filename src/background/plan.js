@@ -53,6 +53,7 @@ export async function plan({ hash, sections, meta = {}, providerId }) {
     destination: provider.destination,
     label: provider.label,
     host: hostOf(provider.baseUrl),
+    bridge: provider.bridge === true,
     strategy: provider.strategy,
     sectionCount: sendable.length,
     sectionTitles: sendable.map((section) => section.title),

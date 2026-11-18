@@ -8,7 +8,7 @@
 // which is what makes blocking here acceptable.
 import { el } from "./el.js";
 
-const DESTINATION_NAMES = { google: "Google", local: "this machine" };
+const DESTINATION_NAMES = { google: "Google", anthropic: "Anthropic", local: "this machine" };
 
 const plural = (n, word) => `${n.toLocaleString("en")} ${word}${n === 1 ? "" : "s"}`;
 
@@ -26,7 +26,9 @@ function destinationLine(plan) {
   const what = `${plan.label} (${plan.model})`;
   return plan.destination === "local"
     ? `Stays on ${where} — ${what} at ${plan.host}`
-    : `Sent to ${where} — ${what}`;
+    : plan.bridge
+      ? `Sent to ${where} — ${what}, through Claude Code on your subscription`
+      : `Sent to ${where} — ${what}`;
 }
 
 // "What exactly gets sent" deserves an honest answer, and the section titles are
@@ -71,7 +73,8 @@ export function confirmCard(plan, { onConfirm, onPickProvider }) {
   // live regardless: consent is permission, not success, and a grant recorded
   // now means entering the key later does not ask again.
   if (!plan.hasKey && plan.destination !== "local") {
-    card.append(el("p", "confirm-warn", `No API key is stored for ${plan.label} yet — add one in settings.`));
+    const missing = plan.bridge ? "No bridge token is stored" : "No API key is stored";
+    card.append(el("p", "confirm-warn", `${missing} for ${plan.label} yet — add one in settings.`));
   }
   const go = el("button", "confirm-go", "Generate outline");
   go.type = "button";

@@ -16,10 +16,11 @@ import { decodeJson, networkError, originRefusedError } from "./wire.js";
  * @param {object[]} args.messages chat messages
  * @param {object} args.schema JSON schema the response must match
  * @param {(sections: object[]) => void} [args.onPartial] complete sections so far
+ * @param {() => void} [args.onAlive] any line arrived, keep-alives included
  * @param {AbortSignal} [args.signal]
  * @returns {Promise<{data: object, usage: object|null, text: string}>}
  */
-export async function chatJson({ providerId, provider, apiKey, messages, schema, onPartial, signal }) {
+export async function chatJson({ providerId, provider, apiKey, messages, schema, onPartial, onAlive, signal }) {
   const body = {
     model: provider.model,
     messages,
@@ -36,7 +37,9 @@ export async function chatJson({ providerId, provider, apiKey, messages, schema,
   if (provider.keyRef) {
     if (!apiKey) {
       throw new ProviderError(
-        `No API key is stored for ${provider.label}. Add one in Scholar Reader's settings.`,
+        provider.bridge
+          ? `No bridge token is stored for ${provider.label}. Start the bridge with \`npm run bridge\` and paste the token it prints into Scholar Reader's settings.`
+          : `No API key is stored for ${provider.label}. Add one in Scholar Reader's settings.`,
         { kind: "auth", providerId },
       );
     }
@@ -57,13 +60,17 @@ export async function chatJson({ providerId, provider, apiKey, messages, schema,
 
   if (!response.ok) throw await httpError(response, providerId, provider);
 
-  const { content, usage } = await readStream(response, { onPartial, providerId, provider });
+  const { content, usage } = await readStream(response, { onPartial, onAlive, providerId, provider });
   return { data: decodeJson(content, providerId), usage, text: content };
 }
 
 // SSE: `data: {json}` lines, terminated by `data: [DONE]`. Deltas accumulate
 // into one content string; usage arrives on a final chunk with no choices.
-async function readStream(response, { onPartial, providerId, provider }) {
+//
+// Two extensions, both sent only by the Claude bridge (tools/bridge/server.mjs):
+// `final_content` replaces what was streamed when the model started its answer
+// over, and `error` is a failure after the 200 was already committed.
+async function readStream(response, { onPartial, onAlive, providerId, provider }) {
   const reader = response.body.getReader();
   const decoder = new TextDecoder();
   let buffer = "";
@@ -81,6 +88,7 @@ async function readStream(response, { onPartial, providerId, provider }) {
       while ((split = buffer.indexOf("\n")) !== -1) {
         const line = buffer.slice(0, split).trim();
         buffer = buffer.slice(split + 1);
+        if (line) onAlive?.();
         if (!line.startsWith("data:")) continue;
         const payload = line.slice(5).trim();
         if (payload === "[DONE]") continue;
@@ -90,6 +98,11 @@ async function readStream(response, { onPartial, providerId, provider }) {
         } catch {
           continue; // A keep-alive or a comment line; not fatal.
         }
+        if (chunk.error) {
+          const { status = 502, message = "", retry_after: retryAfter } = chunk.error;
+          throw toError(status, String(message).slice(0, 300), retryAfter, providerId, provider);
+        }
+        if (typeof chunk.final_content === "string") content = chunk.final_content;
         if (chunk.usage) usage = chunk.usage;
         const delta = chunk.choices?.[0]?.delta?.content;
         if (typeof delta === "string" && delta) {
@@ -105,7 +118,7 @@ async function readStream(response, { onPartial, providerId, provider }) {
       }
     }
   } catch (cause) {
-    if (cause?.name === "AbortError") throw cause;
+    if (cause?.name === "AbortError" || cause instanceof ProviderError) throw cause;
     throw networkError(cause, providerId, provider);
   }
 
@@ -114,14 +127,18 @@ async function readStream(response, { onPartial, providerId, provider }) {
 
 async function httpError(response, providerId, provider) {
   const detail = (await response.text().catch(() => "")).slice(0, 300);
+  return toError(response.status, detail, response.headers.get("retry-after"), providerId, provider);
+}
 
+function toError(status, detail, retryAfterHeader, providerId, provider) {
+  const response = { status };
   if (response.status === 429) {
-    const retryAfter = Number(response.headers.get("retry-after"));
-    return new ProviderError(`${provider.label} is rate limited.`, {
+    const retryAfter = Number(retryAfterHeader);
+    return new ProviderError(`${provider.label} is rate limited.${bridgeDetail(provider, detail)}`, {
       kind: "rate-limit",
       providerId,
       status: 429,
-      retryAfterMs: Number.isFinite(retryAfter) ? retryAfter * 1000 : undefined,
+      retryAfterMs: Number.isFinite(retryAfter) && retryAfter > 0 ? retryAfter * 1000 : undefined,
     });
   }
   // A local endpoint that refuses an origin is refusing it server-side; that is
@@ -131,7 +148,8 @@ async function httpError(response, providerId, provider) {
     return originRefusedError(providerId, response.status);
   }
   if (response.status === 401 || response.status === 403) {
-    return new ProviderError(`${provider.label} rejected the API key (${response.status}).`, {
+    const what = provider.bridge ? "bridge token or the Claude Code login" : "API key";
+    return new ProviderError(`${provider.label} rejected the ${what} (${response.status}).${bridgeDetail(provider, detail)}`, {
       kind: "auth",
       providerId,
       status: response.status,
@@ -141,4 +159,16 @@ async function httpError(response, providerId, provider) {
     `${provider.label} returned ${response.status}${detail ? `: ${detail}` : ""}`,
     { kind: "http", providerId, status: response.status },
   );
+}
+
+// The bridge's error bodies are its own words about Claude Code, written for the
+// reader; a public API's are not, so only the bridge's are shown on these paths.
+function bridgeDetail(provider, detail) {
+  if (!provider.bridge || !detail) return "";
+  try {
+    const message = JSON.parse(detail)?.error?.message;
+    return message ? ` ${message}` : "";
+  } catch {
+    return ` ${detail}`;
+  }
 }

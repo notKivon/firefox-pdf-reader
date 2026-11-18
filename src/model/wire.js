@@ -45,8 +45,9 @@ export function originRefusedError(providerId, status) {
 /** A request that never reached the provider at all. */
 export function networkError(cause, providerId, provider) {
   if (cause?.name === "AbortError") return cause;
-  const remedy =
-    provider.destination === "local"
+  const remedy = provider.bridge
+    ? " Is the Claude bridge running? Start it with `npm run bridge` in the Scholar Reader folder."
+    : provider.destination === "local"
       ? ` Is Ollama running at ${provider.baseUrl}?`
       : " Check the network connection.";
   return new ProviderError(`Could not reach ${provider.label}.${remedy}`, {

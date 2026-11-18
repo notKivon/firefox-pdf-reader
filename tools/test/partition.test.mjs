@@ -22,7 +22,7 @@ const ENTRIES = ["viewer/viewer.js", "settings/settings.js"];
 const UNPARTITIONED = new Set(["store/apikeys.js", "store/settings.js"]);
 
 const db = installIndexedDb();
-const store = { apiKeys: { gemini: "test-key-not-a-real-one" } };
+const store = { apiKeys: { gemini: "test-key-not-a-real-one", "claude-bridge": "srb_test_token" } };
 let routerListener;
 globalThis.document = { createElement: (tag) => new FakeNode(tag) };
 globalThis.browser = {
@@ -94,8 +94,8 @@ await test("Generate outline grants through the router, and the router's gate th
   assert.ok(root.find("outline-ready"), root.textContent);
   assert.equal(calls.length, 1, "whole-document: one request");
   const [grant] = db.records("consents").filter((r) => r.hash === hash);
-  assert.equal(grant.key, cacheKey(hash, "gemini-prod"));
-  assert.equal(grant.destination, "google", "taken from the descriptor");
+  assert.equal(grant.key, cacheKey(hash, "claude-opus"));
+  assert.equal(grant.destination, "anthropic", "taken from the descriptor");
 });
 
 await test("a grant is refused unless it names the key the router would derive", async () => {

@@ -50,7 +50,7 @@ const tick = () => new Promise((r) => setTimeout(r, 0));
 
 await test("a stored order is normalised: unknown ids dropped, duplicates collapsed, missing ones appended", () => {
   assert.deepEqual(normalizeOrder("garbage"), DEFAULT_ORDER);
-  assert.deepEqual(normalizeOrder(["ollama", "nope", "ollama"]), ["ollama", ...DEFAULT_ORDER.filter((id) => id !== "ollama")]);
+  assert.deepEqual(normalizeOrder(["ollama", "nope", "ollama"]), ["claude-opus", "ollama", ...DEFAULT_ORDER.filter((id) => id !== "ollama" && id !== "claude-opus")]);
 });
 
 await test("no order can put the local model in a Google provider's fallback chain", () => {
@@ -62,12 +62,25 @@ await test("no order can put the local model in a Google provider's fallback cha
 });
 
 await test("plan with no provider named uses the first of the reader's order", async () => {
-  await setProviderOrder(["gemini-dev", "gemini-prod", "ollama"]);
+  await setProviderOrder(["gemini-dev", "gemini-prod", "claude-opus", "ollama"]);
   const { sections } = JSON.parse(readFileSync(new URL("../../fixtures/adam.json", import.meta.url), "utf8"));
   const detail = await plan({ hash: "c".repeat(64), sections });
   assert.equal(detail.providerId, "gemini-dev");
-  assert.deepEqual(detail.otherProviders.map((p) => p.id), ["gemini-prod", "ollama"]);
+  assert.deepEqual(
+    detail.otherProviders.map((p) => p.id),
+    ["gemini-prod", "claude-opus", "ollama", "claude-sonnet", "claude-haiku"],
+  );
   await setProviderOrder(DEFAULT_ORDER);
+});
+
+await test("an order saved before the Claude providers existed gets Opus in front", () => {
+  assert.deepEqual(normalizeOrder(["gemini-dev", "gemini-prod", "ollama"]).slice(0, 3), [
+    "claude-opus",
+    "gemini-dev",
+    "gemini-prod",
+  ]);
+  assert.equal(normalizeOrder(["gemini-prod", "claude-haiku"])[0], "gemini-prod", "a Claude-aware order stands");
+  assert.equal(normalizeOrder(undefined)[0], "claude-opus", "nothing stored is the default");
 });
 
 await test("opt-out hosts accept pasted URLs and reject what is not a host", () => {
@@ -165,14 +178,15 @@ await test("the key field never shows the stored key, only its last four charact
   store.apiKeys = { gemini: "AIzaTESTTESTTESTwxyz" };
   const body = new FakeNode("div");
   await renderKeys(body);
-  const input = body.children[0].children[2].children[0];
+  const row = body.children.find((child) => /Google AI Studio/.test(child.textContent));
+  const input = row.children[2].children[0];
   assert.equal(input.value ?? "", "");
   assert.ok(!JSON.stringify(body.textContent).includes("AIzaTEST"));
   assert.match(body.textContent, /…wxyz/);
   assert.equal(maskKey("short"), "…");
 
   input.value = "  AIzaNEWKEYNEWKEY1234 ";
-  body.children[0].children[2].children[1].click();
+  row.children[2].children[1].click();
   await tick(); await tick();
   assert.equal(store.apiKeys.gemini, "AIzaNEWKEYNEWKEY1234");
   assert.equal(input.value, "", "the field is emptied once saved");

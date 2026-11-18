@@ -17,6 +17,15 @@
 // an estimated cost. Nothing else reads it.
 
 export const PROVIDERS = {
+  // Claude through the local bridge (tools/claude-bridge.mjs), which runs Claude
+  // Code headless on the reader's own subscription login — never an Anthropic
+  // API key. `keyRef` here is the bridge's own token, not a provider key.
+  // `pricing: null` because a subscription has no per-token price to state.
+  // `promptStyle: "guidelines"` asks for judgement rather than hard limits; see
+  // prompts.js. Haiku keeps the strict rules the small models need.
+  "claude-opus": claudeVia("Claude Opus 5.5", "claude-opus-5-5", "guidelines"),
+  "claude-sonnet": claudeVia("Claude Sonnet 5.5", "claude-sonnet-5-5", "guidelines"),
+  "claude-haiku": claudeVia("Claude Haiku 5.5", "claude-haiku-5-5", "strict"),
   "gemini-prod": {
     label: "Gemini 3.8 Flash",
     baseUrl: "https://generativelanguage.googleapis.com/v1beta/openai/",
@@ -66,10 +75,26 @@ export const PROVIDERS = {
   },
 };
 
-// The user's stated preference: 3.8 Flash serves reading by default. Quality on
-// the paper they actually read outweighs the token cost, which at a few papers
-// a day is under a dollar a year.
-export const DEFAULT_PROVIDER_ID = "gemini-prod";
+function claudeVia(label, model, promptStyle) {
+  return {
+    label: `${label} (via Claude Code)`,
+    baseUrl: "http://127.0.0.1:8765/v1/",
+    model,
+    keyRef: "claude-bridge",
+    destination: "anthropic",
+    strategy: "whole-document",
+    limits: null,
+    pricing: null,
+    bridge: true,
+    promptStyle,
+    supports: { jsonSchema: true, streaming: true, reasoningOff: false },
+  };
+}
+
+// The user's stated preference (2026-11-18): Opus 5.5 on their Claude Code
+// subscription serves reading by default. Gemini stays available as an explicit
+// choice; it was the default from step 1 until then.
+export const DEFAULT_PROVIDER_ID = "claude-opus";
 
 // Tried in order when a provider is quota-exhausted or answers 429.
 //
@@ -78,7 +103,11 @@ export const DEFAULT_PROVIDER_ID = "gemini-prod";
 // stays inside one `destination` — same text, same company, so the consent
 // already given still covers it — and reaching the local model is an explicit
 // act, offered as a control when the Google chain runs out.
-export const FALLBACK_ORDER = ["gemini-prod", "gemini-dev"];
+//
+// Sonnet and Haiku are not in it either: dropping to a smaller model is the
+// reader's call, made in settings or from the pane, never a quiet consequence
+// of Opus hitting its usage limit.
+export const FALLBACK_ORDER = ["claude-opus", "gemini-prod", "gemini-dev"];
 
 /**
  * @param {string} id key into PROVIDERS

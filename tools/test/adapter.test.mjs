@@ -194,7 +194,7 @@ await test("an exhausted chain stops and never reaches another destination", asy
     (err) => {
       assert.equal(err.kind, "exhausted");
       assert.deepEqual(err.tried, ["gemini-prod", "gemini-dev"]);
-      assert.deepEqual(err.otherDestinations, ["ollama"], "offered as a choice, never taken automatically");
+      assert.deepEqual(err.otherDestinations, ["claude-opus", "claude-sonnet", "claude-haiku", "ollama"], "offered as a choice, never taken automatically");
       return true;
     },
   );

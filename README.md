@@ -95,7 +95,15 @@ Then, once per profile:
    temporary add-on, and Firefox may clear its storage along with it. The user
    found no problem after a restart on 2026-09-13. If settings ever shows no key
    after a restart, enter it again.
-6. **Only for the local model:** Ollama checks the request's `Origin`. With the
+6. **For Claude (the default):** run `npm run bridge` in this folder and leave it
+   running. It needs Claude Code logged in with your claude.ai subscription
+   (`claude auth status` shows `"authMethod": "claude.ai"`); it refuses to start
+   otherwise, and it never uses an `ANTHROPIC_API_KEY`, so outlines count against
+   your subscription's usage, not an API bill. The first run prints a token: paste
+   it into settings under **Claude bridge token**. The token is kept in
+   `~/.config/scholar-reader/bridge-token`. Opus 5.5 is the default; Sonnet 5.5
+   and Haiku 5.5 are in the provider list, in settings or the pane's switch.
+7. **Only for the local model:** Ollama checks the request's `Origin`. With the
    macOS desktop app, run `launchctl setenv OLLAMA_ORIGINS "moz-extension://*"` and
    restart Ollama. This does not survive a reboot. If Ollama was started from a
    shell with `ollama serve`, export the variable in that shell instead.
@@ -149,6 +157,7 @@ document in the page. No data goes to the developer.
 | `npm test` | Unit and integration tests in Node, against stubs — no network |
 | `npm run package` | Build, secrets gate, lint, then write the XPI and its source archive to `web-ext-artifacts/`. Refuses an uncommitted tree. |
 | `npm run check:secrets` | Fail if `dist/` or any tracked file contains an API key. Run before any packaging or signing step. |
+| `npm run bridge` | Start the local Claude bridge (Opus/Sonnet/Haiku on your Claude Code subscription). First run prints the token to paste into settings. |
 | `npm run probe` | Send one fixture to a real provider and report outline quality — spends real quota; see PROGRESS.md |
 
 ## Secrets

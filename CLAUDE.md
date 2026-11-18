@@ -52,7 +52,7 @@ This file loads every session. Implementation detail is in **SPEC.md**; live bui
 - **Automatic fallback may only cross to a provider with the same `destination`.** Consent is to a destination, not merely to a provider id; falling back from `gemini-prod` to `gemini-dev` is the same text going to the same company, so the original consent covers it. Reaching a different destination — notably the local model — requires its own confirmation, offered as an explicit control in the pane.
 
 ### Outline generation
-- Output is always: per section, **2–4 bullets, each at most 20 words**, extractive — restating what the section says, never inferring beyond it. Plus one whole-document TL;DR of at most 2 sentences.
+- **Bullet shape depends on the provider's `promptStyle`** (changed 2026-11-18 at the user's request). `"strict"`, used by Gemini, Gemma and Haiku: per section **2–4 bullets, each at most 20 words**, extractive, plus a TL;DR of at most 2 sentences. `"guidelines"`, used by Opus and Sonnet: loose guidance and the model's own judgement on bullet count and length, still faithful to the text, with a brief TL;DR. Under either style, each title is echoed exactly and the answer is JSON in the schema.
 - Results-type sections must carry the actual reported numbers where the section states them.
 - The model returns JSON matching the schema in SPEC.md. Prose parsing is never a fallback; a malformed response is an error surfaced to the user.
 - Every bullet carries the `page` and `y` of its section, so a bullet always has a target even when nothing better is known.
@@ -70,7 +70,7 @@ This file loads every session. Implementation detail is in **SPEC.md**; live bui
 - A provider descriptor may declare `limits: { rpd, rpm }` and must declare a `destination` (`"google"`, `"local"`, …) — the party the text reaches. Consent and fallback are both scoped by it.
 - Google's free-tier daily quota resets at **midnight US Pacific Time**, not local time. The quota day is therefore the calendar date produced by `Intl.DateTimeFormat('en-CA', { timeZone: 'America/Los_Angeles' })`, which tracks Pacific DST automatically. Counters are keyed by that string.
 - When a request would exceed `rpd`, or a call returns HTTP 429, the adapter **falls back to the next configured provider of the same `destination`** rather than failing. When the chain for that destination is exhausted, the outline pane states which provider is exhausted and when its quota resets, in Asia/Hong_Kong time, and offers any other-destination provider as an explicit choice.
-- **The local model is never an automatic fallback target.** Gemini is the default and serves every automatic path; Ollama is used only when the user selects it — in settings, or from the control the exhausted-provider message offers. This is a user preference, not an incidental consequence of the fallback list.
+- **The local model is never an automatic fallback target.** Claude Opus 5.5, through the bridge, is the default (since 2026-11-18; Gemini was the default before). Its `anthropic` chain holds only Opus, so a usage limit stops and offers Gemini, Sonnet, Haiku or the local model as explicit choices. Sonnet and Haiku are never automatic targets either: dropping to a smaller model is the user's call. Ollama is used only when the user selects it — in settings, or from the control the exhausted-provider message offers. This is a user preference, not an incidental consequence of the fallback list.
 
 ### Caching
 - Cache key: `sha256:providerId:model:strategy:promptVersion`.
@@ -90,8 +90,10 @@ This file loads every session. Implementation detail is in **SPEC.md**; live bui
 ## Project values
 - Extension ID (`browser_specific_settings.gecko.id`): `scholar-reader@kevin.local`
 - Ollama endpoint: `http://127.0.0.1:11434`
+- Claude bridge: `http://127.0.0.1:8765` (`npm run bridge`, `tools/claude-bridge.mjs`); token in `~/.config/scholar-reader/bridge-token`
+- **Subscription, not API:** the Claude providers run through the local bridge on the user's Claude Code subscription login, never on an Anthropic API key. The bridge refuses to start unless `claude auth status` reports a `claude.ai` login, and it strips `ANTHROPIC_API_KEY`/`ANTHROPIC_AUTH_TOKEN` (and the Bedrock/Vertex switches) from the CLI's environment. Usage counts against the subscription's limits, which interactive Claude Code shares.
 - Gemini OpenAI-compatible base URL: `https://generativelanguage.googleapis.com/v1beta/openai/`
-- Production model: `gemini-3.8-flash` · Development model: `gemini-3.5-flash-lite` · Offline model: `gemma4:e4b`
+- Default model: `claude-opus-5-5` (also `claude-sonnet-5-5`, `claude-haiku-5-5`) · Gemini: `gemini-3.8-flash`, dev `gemini-3.5-flash-lite` · Offline model: `gemma4:e4b`
 
 ## Working agreement (multi-session build)
 - Build in the order in PROGRESS.md, one step at a time.

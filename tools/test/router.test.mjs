@@ -31,7 +31,7 @@ async function test(name, fn) {
 }
 
 await test("plan describes the send without making one", async () => {
-  const detail = await plan({ hash, sections, meta: { title: "BERT", pageCount: 16 } });
+  const detail = await plan({ hash, sections, meta: { title: "BERT", pageCount: 16 }, providerId: "gemini-prod" });
   assert.equal(fetches, 0, "plan must issue no network request");
   assert.equal(detail.cacheKey, `${hash}:gemini-prod:gemini-3.8-flash:whole-document:${PROMPT_VERSION}`);
   assert.equal(detail.providerId, "gemini-prod");
@@ -46,6 +46,22 @@ await test("plan describes the send without making one", async () => {
   assert.ok(detail.estTokens > 1000 && detail.estTokens < 100000);
   assert.ok(detail.estCost > 0 && detail.estCost < 0.5, `cost estimate ${detail.estCost}`);
   console.log(`      BERT: ${detail.sectionCount} sections, ~${detail.estTokens} tokens, est. $${detail.estCost.toFixed(4)}`);
+});
+
+await test("the default is Opus through the bridge, sent to Anthropic with no cost line", async () => {
+  const detail = await plan({ hash, sections, meta: { title: "BERT" } });
+  assert.equal(detail.providerId, "claude-opus");
+  assert.equal(detail.cacheKey, `${hash}:claude-opus:claude-opus-5-5:whole-document:${PROMPT_VERSION}`);
+  assert.equal(detail.destination, "anthropic");
+  assert.equal(detail.bridge, true);
+  assert.equal(detail.host, "127.0.0.1:8765");
+  assert.equal(detail.estCost, null, "a subscription has no per-token price");
+  assert.deepEqual(
+    detail.alternatives.map((a) => a.id),
+    ["gemini-prod", "gemini-dev", "ollama"],
+    "other destinations are offered, never taken",
+  );
+  assert.equal(fetches, 0);
 });
 
 await test("plan for a per-section provider counts N+1 requests and omits an unknown cost", async () => {
@@ -66,7 +82,7 @@ await test("plan for the local provider says the text stays on the machine", asy
 await test("the router refuses an unconsented outline and issues nothing", async () => {
   const answer = await runOutline({ hash, sections, meta: { title: "BERT" } }, 7);
   assert.equal(answer.error, "consent-required");
-  assert.equal(answer.plan.cacheKey, `${hash}:gemini-prod:gemini-3.8-flash:whole-document:${PROMPT_VERSION}`);
+  assert.equal(answer.plan.cacheKey, `${hash}:claude-opus:claude-opus-5-5:whole-document:${PROMPT_VERSION}`);
   assert.equal(fetches, 0, "no document text may reach a provider without a grant");
 });
 

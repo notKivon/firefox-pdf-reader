@@ -120,5 +120,10 @@ const resetText = new Intl.DateTimeFormat("en-GB", {
 
 /** The reset instant in the reader's own timezone, which is the only one they can act on. */
 export function resetsAtText(at = Date.now()) {
-  return `${resetText.format(resetsAt(at))} Hong Kong time`;
+  return hongKongText(resetsAt(at));
+}
+
+/** Any instant, in the reader's zone and the same words as the quota reset. */
+export function hongKongText(ms) {
+  return `${resetText.format(ms)} Hong Kong time`;
 }

@@ -9,7 +9,7 @@ import { goodAnswer, installFetch, rateLimited } from "./stub.mjs";
 // local model.
 const db = installIndexedDb();
 
-const store = { apiKeys: { gemini: "test-key-not-a-real-one" } };
+const store = { apiKeys: { gemini: "test-key-not-a-real-one" }, providerOrder: ["gemini-prod", "gemini-dev", "claude-opus"] };
 globalThis.browser = {
   storage: { local: { get: async (k) => ({ [k]: store[k] }) } },
   runtime: { onMessage: { addListener() {} } },
@@ -171,7 +171,7 @@ await test("both exhausted stops, names the reset in Hong Kong time, and offers 
   assert.equal(result.error, "exhausted");
   assert.match(result.message, /Gemini 3\.5 Flash-Lite/, "which provider is exhausted");
   assert.match(result.message, /Hong Kong time/, "and when it comes back, where the reader lives");
-  assert.deepEqual(result.otherDestinations, ["ollama"], "offered as a choice, never taken");
+  assert.deepEqual(result.otherDestinations, ["claude-opus", "claude-sonnet", "claude-haiku", "ollama"], "offered as a choice, never taken");
   assert.equal(calls.length, 0);
   assert.equal(db.records("outlines").filter((r) => r.hash === hash).length, 0);
 });

@@ -63,6 +63,7 @@ export async function runOutline(request, tabId, { watchdog } = {}) {
         dog.poke();
         tell(partial);
       },
+      onAlive: () => dog.poke(),
       onProviderChange: (id) => {
         dog.poke();
         tell({ providerId: id });

@@ -9,7 +9,7 @@ import { ProviderError, isFallbackWorthy, isSectionLocal } from "./errors.js";
 import { chatJson } from "./transport.js";
 import { fallbacksFor, getProvider, PROVIDERS } from "./providers.js";
 import { outlineSchema, sectionMessages, tldrMessages, tldrSchema, wholeDocumentMessages } from "./prompts.js";
-import { hasRoomFor, record, resetsAtText } from "../store/quota.js";
+import { hasRoomFor, hongKongText, record, resetsAtText } from "../store/quota.js";
 
 // Enough to keep a per-section run busy without tripping a per-minute limit.
 const CONCURRENCY = 3;
@@ -22,13 +22,15 @@ const CONCURRENCY = 3;
  * @param {object} [args.meta] `{title, pageCount}` for the prompt header
  * @param {(partial: {sections: object[]}) => void} [args.onProgress] sections
  *   complete so far, in sent order, for progressive fill
+ * @param {() => void} [args.onAlive] the provider sent something, even if not
+ *   yet a section — what keeps a long think from tripping the stall watchdog
  * @param {(providerId: string) => void} [args.onProviderChange] fired when
  *   fallback moves the run to another provider of the same destination
  * @param {AbortSignal} [args.signal]
  * @param {string[]} [args.order] the reader's provider order, for fallback
  * @returns {Promise<{sections, tldr, providerId, model, strategy, usage}>}
  */
-export async function outline({ sections, providerId, resolveKey, meta, onProgress, onProviderChange, signal, order }) {
+export async function outline({ sections, providerId, resolveKey, meta, onProgress, onAlive, onProviderChange, signal, order }) {
   // CLAUDE.md keeps empty-text sections (a parent heading whose first subsection
   // follows immediately) because they carry the paper's structure. They cannot
   // be summarised and are never sent; they come back bullet-less, in place.
@@ -48,7 +50,7 @@ export async function outline({ sections, providerId, resolveKey, meta, onProgre
     tried.push(id);
     if (tried.length > 1) onProviderChange?.(id);
     try {
-      const result = await run({ id, sendable, resolveKey, meta, onProgress, signal });
+      const result = await run({ id, sendable, resolveKey, meta, onProgress, onAlive, signal });
       return { ...result, sections: reinsertEmpty(sections, sendable, result.sections) };
     } catch (err) {
       if (!isFallbackWorthy(err)) throw err;
@@ -64,19 +66,28 @@ export async function outline({ sections, providerId, resolveKey, meta, onProgre
   // quota comes back, in the reader's own timezone: it is the one fact that
   // tells them whether to wait or to pick the local model.
   const last = getProvider(tried.at(-1));
+  const resets = resetsFor(last, lastError);
   throw new ProviderError(
     `${last.label} ${lastError?.quota ? "has used its quota for today" : "is rate limited"} ` +
       `and no other ${getProvider(providerId).destination} provider is available. ` +
-      `The daily quota resets at ${resetsAtText()}.`,
+      (resets ? `${last.bridge ? "Its usage limit" : "The daily quota"} resets at ${resets}.` : ""),
     {
       kind: "exhausted",
       providerId: tried.at(-1),
       tried,
-      resetsAtText: resetsAtText(),
+      resetsAtText: resets,
       otherDestinations: otherDestinationIds(providerId),
       cause: lastError,
     },
   );
+}
+
+// Google's quota day ends at Pacific midnight; a Claude subscription's limit
+// window ends whenever Claude Code says it does, which the bridge passes on as
+// Retry-After. Unknown is said as nothing rather than as a guess.
+function resetsFor(provider, err) {
+  if (!provider.bridge) return resetsAtText();
+  return err?.retryAfterMs ? hongKongText(Date.now() + err.retryAfterMs) : null;
 }
 
 function otherDestinationIds(providerId) {
@@ -84,7 +95,7 @@ function otherDestinationIds(providerId) {
   return Object.keys(PROVIDERS).filter((id) => PROVIDERS[id].destination !== destination);
 }
 
-async function run({ id, sendable, resolveKey, meta, onProgress, signal }) {
+async function run({ id, sendable, resolveKey, meta, onProgress, onAlive, signal }) {
   const provider = getProvider(id);
   // Asked before the key is even read: a run that cannot finish inside the
   // day's remaining requests should move to the next provider rather than
@@ -107,7 +118,7 @@ async function run({ id, sendable, resolveKey, meta, onProgress, signal }) {
   const call = async (messages, schema, onPartial) => {
     let result;
     try {
-      result = await chatJson({ providerId: id, provider, apiKey, messages, schema, onPartial, signal });
+      result = await chatJson({ providerId: id, provider, apiKey, messages, schema, onPartial, onAlive, signal });
     } catch (err) {
       // A ProviderError carrying a status means the provider answered, so it
       // counted the request and so must we — a 429 included. A network failure
@@ -139,8 +150,8 @@ async function wholeDocument({ id, sendable, meta, call, onProgress }) {
     : undefined;
 
   const data = await call(
-    wholeDocumentMessages(sendable, meta),
-    outlineSchema(sendable.length),
+    wholeDocumentMessages(sendable, meta, getProvider(id).promptStyle),
+    outlineSchema(sendable.length, { style: getProvider(id).promptStyle }),
     onPartial,
   );
   // Checksummed before it can become a cache entry: see align.js.
@@ -160,7 +171,8 @@ async function perSection({ id, sendable, meta, call, onProgress }) {
       const i = next++;
       if (i >= sendable.length || stopped) return;
       try {
-        const data = await call(sectionMessages(sendable[i], meta), outlineSchema(1, { tldr: false }));
+        const style = getProvider(id).promptStyle;
+        const data = await call(sectionMessages(sendable[i], meta, style), outlineSchema(1, { tldr: false, style }));
         // One section in, one section out: the same checksum, one at a time.
         results[i] = attachTargets([sendable[i]], data.sections, id)[0];
       } catch (err) {
@@ -188,7 +200,7 @@ async function perSection({ id, sendable, meta, call, onProgress }) {
 
   // No request in this strategy ever saw the whole paper, so the TL;DR is a
   // reduce over the bullets rather than over the text.
-  const data = await call(tldrMessages(results, meta), tldrSchema);
+  const data = await call(tldrMessages(results, meta, getProvider(id).promptStyle), tldrSchema);
   return { sections: results, tldr: data.tldr ?? "" };
 }
 

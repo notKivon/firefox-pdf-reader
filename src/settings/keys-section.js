@@ -4,6 +4,10 @@ import { getApiKey, setApiKey } from "../store/apikeys.js";
 import { keyRefs, maskKey } from "./model.js";
 import { act, button, el, statusLine } from "./ui.js";
 
+// The bridge token is not a provider key: it is what `npm run bridge` printed,
+// and it lets only this extension use the bridge. Stored in the same slot kind.
+const KEY_NAMES = { gemini: "Google AI Studio", "claude-bridge": "Claude bridge token" };
+
 export async function renderKeys(body) {
   const rows = [];
   for (const { ref, users } of keyRefs()) rows.push(await keyRow(ref, users));
@@ -47,7 +51,7 @@ async function keyRow(ref, users) {
   );
 
   const heading = el("div", "settings-row");
-  heading.append(el("strong", "", ref === "gemini" ? "Google AI Studio" : ref), state);
+  heading.append(el("strong", "", KEY_NAMES[ref] ?? ref), state);
   const used = el("div", "settings-dim", `Used by ${users.join(", ")}`);
   const entry = el("div", "settings-row");
   entry.append(input, save, clear);

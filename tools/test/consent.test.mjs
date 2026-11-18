@@ -7,7 +7,7 @@ import { goodAnswer, installFetch } from "./stub.mjs";
 
 const idb = installIndexedDb();
 globalThis.browser = {
-  storage: { local: { get: async () => ({ apiKeys: { gemini: "test-key-not-a-real-one" } }) } },
+  storage: { local: { get: async () => ({ apiKeys: { gemini: "test-key-not-a-real-one" }, providerOrder: ["gemini-prod", "gemini-dev", "claude-opus"] }) } },
   runtime: { onMessage: { addListener() {} } },
   tabs: { sendMessage: async () => {} },
 };
@@ -116,10 +116,13 @@ await test("the plan the card renders carries everything CLAUDE.md requires it t
     assert.ok(detail[field] !== undefined && detail[field] !== "", `plan.${field} is missing`);
   }
   assert.equal(detail.host, "generativelanguage.googleapis.com");
-  assert.deepEqual(detail.alternatives, [{ id: "ollama", label: "Gemma 4 E4B (local)", destination: "local" }]);
+  assert.deepEqual(
+    detail.alternatives.map((a) => [a.id, a.destination]),
+    [["claude-opus", "anthropic"], ["claude-sonnet", "anthropic"], ["claude-haiku", "anthropic"], ["ollama", "local"]],
+  );
   const local = await plan({ hash, sections, meta, providerId: "ollama" });
   assert.equal(local.host, "127.0.0.1:11434");
-  assert.deepEqual(local.alternatives.map((a) => a.id), ["gemini-prod", "gemini-dev"]);
+  assert.deepEqual(local.alternatives.map((a) => a.id), ["gemini-prod", "gemini-dev", "claude-opus", "claude-sonnet", "claude-haiku"]);
 });
 
 console.log(results.join("\n"));
