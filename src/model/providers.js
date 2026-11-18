@@ -70,6 +70,7 @@ function gemini4(label, model) {
     limits: null,
     pricing: null,
     promptStyle: "guidelines",
+    sections: "model",
     supports: { jsonSchema: true, streaming: true, reasoningOff: false },
   };
 }
@@ -86,6 +87,9 @@ function claudeVia(label, model, promptStyle) {
     pricing: null,
     bridge: true,
     promptStyle,
+    // The model reads the whole paper and chooses its sections; this machine
+    // places them (model/model-sections.js, extract/anchor.js).
+    sections: "model",
     supports: { jsonSchema: true, streaming: true, reasoningOff: false },
   };
 }

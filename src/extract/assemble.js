@@ -8,7 +8,7 @@ const CHUNK_CHARS = 4800;
 
 // Body text is hyphenated at the line break; the text goes to a model, so the
 // word is rejoined rather than left as "representa- tion".
-function joinLines(lines) {
+export function joinLines(lines) {
   let text = "";
   for (const line of lines) {
     if (!text) {
@@ -35,7 +35,7 @@ const isReferences = (title) => {
 // It is NEVER sent to a model and never reaches the wire: `outline-pane.js`
 // strips it at the send boundary, and a test asserts that. The model payload is
 // `text` and nothing else.
-const lineRecords = (lines) =>
+export const lineRecords = (lines) =>
   lines
     .filter((line) => line.str.trim())
     .map((line) => ({ page: line.page, y: line.pdfY, height: line.height, str: line.str }));
@@ -48,8 +48,32 @@ const lineRecords = (lines) =>
  * @param headings {{index, line, title}[]} in reading order
  * @param lines    the document's lines in reading order
  */
+// Below this, what comes before the first heading is a stray running header or
+// an arXiv stamp, not a title page.
+const MIN_FRONT_CHARS = 200;
+export const FRONT_TITLE = "Title and abstract";
+// When the abstract has a heading of its own, what comes before it is only the
+// title block.
+const FRONT_TITLE_ONLY = "Title and authors";
+
 export function buildSections(headings, lines) {
   const sections = [];
+  // Everything before the first heading — title, authors, abstract, and on an
+  // IEEE paper the unheaded abstract and index terms — is its own first section.
+  // It used to be dropped (found 2026-11-18: on a paper whose first heading was
+  // missed, the outline and chat both began halfway through the results).
+  const first = headings[0]?.index ?? lines.length;
+  const front = lines.slice(0, first);
+  const frontText = joinLines(front);
+  if (headings.length && frontText.length >= MIN_FRONT_CHARS) {
+    sections.push({
+      title: /^abstract\b/i.test(String(headings[0].title).trim()) ? FRONT_TITLE_ONLY : FRONT_TITLE,
+      page: front[0].page,
+      y: front[0].pdfY,
+      text: frontText,
+      lines: lineRecords(front),
+    });
+  }
   for (let i = 0; i < headings.length; i++) {
     const { index, line, title } = headings[i];
     if (isReferences(title)) break;

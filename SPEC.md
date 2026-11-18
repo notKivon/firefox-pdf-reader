@@ -233,6 +233,15 @@ The escape hatch above, taken — by Ollama rather than by Gemini, and for a dif
 - Bridge: no schema means text mode. Text blocks are streamed, `result.result` is final, and earlier turns go into the prompt as a transcript, because `claude -p` takes one prompt.
 - `node tools/chat-probe.mjs [fixture] [provider] [port]`: two real turns through a running bridge (spends subscription usage).
 
+## Model-chosen sections (step 24)
+- `extract/sections.js` returns `paper`: every line in reading order up to the References cut, as `{page, y, height, str}`. The viewer sends `{page, y, str}` of it with `plan` and `outline`.
+- `extract/anchor.js`: `paperText` (lines, `[page N]` markers, no numbers), `anchorSections(returned, paper)` (each heading found by normalised match at a line's start, run-in or wrapped onto a second line; forward search only; returns the placed prefix and the first heading that could not be placed), `bodiesOf` (each section's text and lines, heading lines excluded).
+- `model/paper-prompt.js`: instructions and schema `{sections: [{heading, title, bullets}] (1–40), tldr}`; bullet style by `promptStyle`. `model/model-sections.js#paperOutline`: one request, progressive fill of the placed prefix, then the full placement as the checksum.
+- `adapter.js#usesPaper(provider, paper)`: `sections: "model"`, whole-document, and a paper sent. `plan` then counts the paper's characters, reports `sectionCount: null`, `modelSections: true`.
+- Cached outline sections carry `heading`; `viewer/outline-sections.js#resolvedSections` places them on the live extraction every open for bullet location, and hands them to the chat tab.
+- `PROMPT_VERSION` 2: outlines from before are not served.
+- `tools/extract-pdf.mjs paper.pdf [--json out] [--lines]` runs the extension's own extraction in Node (pdf.js's Node build swapped in); `tools/paper-probe.mjs out.json [provider]` runs one real outline of it.
+
 ## store/db.js
 IndexedDB `scholar-reader`, version 1:
 - `docs` — key `hash`; `{ hash, title, authors, doi, arxivId, pageCount, urls[], lastOpened, lastPage, scrollTop }`

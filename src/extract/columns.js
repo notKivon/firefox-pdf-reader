@@ -4,7 +4,7 @@
 // a column afterwards. Grouping lines across the whole page first would fuse
 // the left and right columns of a two-column paper into single lines, which is
 // the exact failure this module exists to prevent.
-import { modalHeight } from "./textlayer.js";
+import { modalHeight } from "./stats.js";
 import { groupLines } from "./lines.js";
 
 // SPEC's acceptance test for a two-column split.
@@ -62,6 +62,26 @@ function straddleShare(items, boundary) {
   return n / items.length;
 }
 
+// Where the gutter actually is: the gap between the left column's right edge and
+// the right column's left edge. Halfway between the two clusters' centres is
+// NOT the gutter when the columns differ in how full their lines are — on an
+// IEEE page (found 2026-11-18) the left column's justified lines end at x≈300
+// while that midpoint fell at x≈299, so a third of the page's lines "straddled"
+// it and the page voted single-column, and the whole paper was read straight
+// across both columns. Wide runs (a spanning title) are left out of the edges;
+// null when the columns overlap and there is no gap to find.
+function gutter(items, left, right, pageWidth) {
+  let leftEdge = -Infinity;
+  let rightStart = Infinity;
+  for (const item of items) {
+    if (item.width > 0.6 * pageWidth) continue;
+    const mid = item.x + item.width / 2;
+    if (Math.abs(mid - left) <= Math.abs(mid - right)) leftEdge = Math.max(leftEdge, item.x + item.width);
+    else rightStart = Math.min(rightStart, item.x);
+  }
+  return rightStart > leftEdge ? (leftEdge + rightStart) / 2 : null;
+}
+
 // → { count, centres, boundary, straddle }. `boundary` is the gutter's x.
 export function detectColumns(items, pageWidth) {
   const single = { count: 1, centres: [], boundary: Infinity, straddle: 0 };
@@ -75,7 +95,7 @@ export function detectColumns(items, pageWidth) {
   if (right - left <= MIN_CENTRE_GAP * pageWidth) return single;
   if (split.counts[0] < floor || split.counts[1] < floor) return single;
 
-  const boundary = (left + right) / 2;
+  const boundary = gutter(items, left, right, pageWidth) ?? (left + right) / 2;
   const straddle = straddleShare(items, boundary);
   if (straddle > MAX_STRADDLE_SHARE) return single;
 

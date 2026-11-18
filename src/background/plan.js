@@ -5,6 +5,8 @@
 // separate message.
 import { estimateCost, estimateTokens, totalChars } from "../model/estimate.js";
 import { getProvider, PROVIDERS } from "../model/providers.js";
+import { usesPaper } from "../model/adapter.js";
+import { paperChars } from "../extract/anchor.js";
 import { getApiKey } from "../store/apikeys.js";
 import { cacheKey } from "../store/cache-key.js";
 import { isConsented } from "../store/consent.js";
@@ -30,12 +32,15 @@ export async function providerOrder() {
  *   `providerId` absent means "the reader's default", which is the first entry
  *   of their order in settings.
  */
-export async function plan({ hash, sections, meta = {}, providerId }) {
+export async function plan({ hash, sections, meta = {}, providerId, paper }) {
   const order = await providerOrder();
   const id = providerId ?? order[0];
   const provider = getProvider(id);
   const sendable = sections.filter((section) => section.text.trim().length > 0);
-  const chars = totalChars(sendable);
+  // A provider that chooses its own sections is sent the whole paper, and the
+  // section count is its answer, not something this card can know beforehand.
+  const whole = usesPaper(provider, paper);
+  const chars = whole ? paperChars(paper) : totalChars(sendable);
   const estTokens = estimateTokens(chars);
   const requests = provider.strategy === "whole-document" ? 1 : sendable.length + 1;
   const key = cacheKey(hash, id);
@@ -55,8 +60,9 @@ export async function plan({ hash, sections, meta = {}, providerId }) {
     host: hostOf(provider.baseUrl),
     bridge: provider.bridge === true,
     strategy: provider.strategy,
-    sectionCount: sendable.length,
-    sectionTitles: sendable.map((section) => section.title),
+    sectionCount: whole ? null : sendable.length,
+    sectionTitles: whole ? [] : sendable.map((section) => section.title),
+    modelSections: whole,
     chars,
     estTokens,
     estCost: estimateCost(id, estTokens, requests),

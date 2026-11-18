@@ -11,6 +11,7 @@ import { el } from "./el.js";
 import { errorBox } from "./pane-error.js";
 import { outlineList } from "./outline-list.js";
 import { readyBox } from "./outline-ready.js";
+import { paperForSending, resolvedSections } from "./outline-sections.js";
 
 // Sections carry their body lines so a bullet can be located against the paper
 // (locate.js). Those lines never leave this page: the router builds the model
@@ -18,7 +19,6 @@ import { readyBox } from "./outline-ready.js";
 // twice for nothing. Stripped explicitly, at the one boundary, rather than by
 // convention — `outline-pane.test.mjs` asserts no outbound message carries them.
 const forSending = (sections) => sections.map(({ lines, ...rest }) => rest);
-
 /**
  * @param {object} args
  * @param {HTMLElement} args.root
@@ -52,16 +52,17 @@ export function createOutlinePane({ root, onJump, onSections, onReady }) {
 
   // The finished outline, fresh or cached: see outline-ready.js.
   function showReady(result) {
+    const resolved = resolvedSections(result, current);
     const { node, rendered } = readyBox(result, {
       onJump,
-      linesFor: (index) => current?.sections?.[index]?.lines,
+      linesFor: (index) => resolved?.[index]?.lines,
       plan: current?.plan,
       onPickProvider: (id) => replan(id).catch(reportFailure),
     });
     show(node);
     list = rendered;
     onSections?.(rendered.targets);
-    onReady?.();
+    onReady?.(resolved);
   }
 
   async function replan(providerId) {
@@ -71,6 +72,7 @@ export function createOutlinePane({ root, onJump, onSections, onReady }) {
       type: "plan",
       hash: current.hash,
       sections: forSending(current.sections),
+      paper: paperForSending(current.paper),
       meta: current.meta,
       providerId,
     });
@@ -122,6 +124,7 @@ export function createOutlinePane({ root, onJump, onSections, onReady }) {
       type: "outline",
       hash: current.hash,
       sections: forSending(current.sections),
+      paper: paperForSending(current.paper),
       meta: current.meta,
       providerId: detail.providerId,
     });
@@ -187,9 +190,9 @@ export function createOutlinePane({ root, onJump, onSections, onReady }) {
     list?.setActive(index);
   }
 
-  /** @param {{hash, sections, meta, scanned}} doc the extraction result */
-  function start({ hash, sections, meta, scanned }) {
-    current = { hash, sections, meta };
+  /** @param {{hash, sections, meta, scanned, paper}} doc the extraction result */
+  function start({ hash, sections, meta, scanned, paper }) {
+    current = { hash, sections, meta, paper };
     // No call, no card: a scanned PDF and an empty extraction both have nothing
     // to send, so neither asks (CLAUDE.md).
     if (scanned) {

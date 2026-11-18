@@ -87,3 +87,19 @@ export function disclosure(plan) {
   }
   return nodes;
 }
+
+/** "Start a new chat?" as a state of the pane: one click to clear, one to keep. */
+export function newChatPrompt({ count, onConfirm, onCancel }) {
+  const box = el("div", "chat-new-prompt");
+  box.append(el("p", null, `Start a new chat? This clears the current conversation (${count} question${count === 1 ? "" : "s"}).`));
+  const row = el("div", "chat-new-row");
+  const go = el("button", "confirm-go", "Start new chat");
+  go.type = "button";
+  go.addEventListener("click", onConfirm);
+  const keep = el("button", "confirm-alt-go", "Keep this one");
+  keep.type = "button";
+  keep.addEventListener("click", onCancel);
+  row.append(go, keep);
+  box.append(row);
+  return box;
+}

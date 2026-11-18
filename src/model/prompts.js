@@ -4,7 +4,10 @@
 // text or the schemas below, or outlines written by the old prompt keep being
 // served as current. It is also part of the consent key, so a bump correctly
 // asks the reader again before the new prompt sends their paper anywhere.
-export const PROMPT_VERSION = 1;
+// 2 (2026-11-18): extraction reads columns properly and keeps the front matter,
+// and the Claude and Gemini providers now choose their own sections
+// (paper-prompt.js). Outlines built on the old sections are not served.
+export const PROMPT_VERSION = 2;
 
 export const MAX_BULLET_WORDS = 20;
 

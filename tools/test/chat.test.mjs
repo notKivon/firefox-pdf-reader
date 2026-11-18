@@ -180,6 +180,50 @@ await test("Opus at its usage limit stops; no other model is tried on its own", 
   assert.equal(calls.length, 1, "Sonnet and Haiku are the reader's choice, not a fallback");
 });
 
+await test("New chat asks once in the pane, then clears the conversation", async () => {
+  const hash = hashOf("8");
+  await ask({ type: "grant", kind: "chat", hash, providerId: "claude-opus", cacheKey: chatKey(hash, "claude-opus") });
+  say("First answer.");
+  await ask({ type: "chat", hash, sections, meta, question: "First?" });
+  const root = new FakeNode("div");
+  const pane = createChatPane({ root, onJump: () => {} });
+  await pane.start({ hash, meta, sections, scanned: false });
+  for (let i = 0; i < 20 && !root.find("chat-new"); i++) await settle();
+  assert.match(root.find("chat-log").textContent, /First answer/);
+
+  root.find("chat-new").click();
+  const prompt = root.find("chat-new-prompt");
+  assert.ok(prompt, "asked in the pane, never a dialog");
+  assert.match(prompt.textContent, /1 question/);
+  prompt.find("confirm-alt-go").click();
+  assert.equal(root.find("chat-new-prompt"), null, "Keep this one keeps it");
+  assert.equal((await ask({ type: "chat-history", hash })).messages.length, 2);
+
+  root.find("chat-new").click();
+  root.find("chat-new-prompt").find("confirm-go").click();
+  for (let i = 0; i < 20 && /First answer/.test(root.find("chat-log").textContent); i++) await settle();
+  assert.doesNotMatch(root.find("chat-log").textContent, /First answer/);
+  assert.equal((await ask({ type: "chat-history", hash })).messages.length, 0);
+});
+
+await test("once an outline is up, chat links point at its sections", async () => {
+  const hash = hashOf("9");
+  const jumps = [];
+  const root = new FakeNode("div");
+  const pane = createChatPane({ root, onJump: (t) => jumps.push(t) });
+  await pane.start({ hash, meta, sections, scanned: false });
+  for (let i = 0; i < 20 && !root.find("chat-input"); i++) await settle();
+  pane.useSections([{ title: "Title and abstract", page: 1, y: 720, text: "Adam is an optimiser.", lines: [] }]);
+  await ask({ type: "grant", kind: "chat", hash, providerId: "claude-opus", cacheKey: chatKey(hash, "claude-opus") });
+  const calls = say("See [§ Title and abstract].");
+  root.find("chat-input").value = "Summary?";
+  root.find("chat-send").click();
+  for (let i = 0; i < 50 && !root.find("chat-cite"); i++) await settle();
+  assert.match(calls[0].body.messages[0].content, /Title: Title and abstract\n\nAdam is an optimiser\./);
+  root.find("chat-cite").click();
+  assert.deepEqual(jumps, [{ page: 1, y: 720 }]);
+});
+
 await test("a scanned paper offers no chat and sends nothing", async () => {
   const root = new FakeNode("div");
   const pane = createChatPane({ root, onJump: () => {} });

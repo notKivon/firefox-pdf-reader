@@ -179,13 +179,17 @@ async function main() {
     onChange: (index) => outlinePane?.setActive(index),
   });
   const debugPane = createDebugPane({ root: els.debug, onJump: (target) => view.scrollToSection(target) });
+  const chatPane = createChatPane({ root: els.chat, onJump: (target) => view.scrollToSection(target) });
   outlinePane = createOutlinePane({
     root: els.outline,
     onJump: (target) => view.scrollToSection(target),
     onSections: (targets) => spy.setSections(targets),
-    onReady: () => debugPane.collapse(),
+    // Once an outline is up, chat cites and is sent the same sections it shows.
+    onReady: (sections) => {
+      debugPane.collapse();
+      if (sections?.length) chatPane.useSections(sections);
+    },
   });
-  const chatPane = createChatPane({ root: els.chat, onJump: (target) => view.scrollToSection(target) });
   initPaneTabs({
     bar: els.tabs,
     tabs: [
@@ -223,7 +227,7 @@ async function main() {
     .then((result) => {
       // No sections means no card and no spinner: the pane says why instead.
       if (result) {
-        outlinePane.start({ hash, meta, sections: result.sections, scanned: result.scanned });
+        outlinePane.start({ hash, meta, sections: result.sections, scanned: result.scanned, paper: result.paper });
         chatPane.start({ hash, meta, sections: result.sections, scanned: result.scanned });
       } else {
         outlinePane.fail("The text layer could not be read, so there is nothing to outline.");

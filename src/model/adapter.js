@@ -9,6 +9,7 @@ import { ProviderError, isFallbackWorthy, isSectionLocal } from "./errors.js";
 import { chatJson } from "./transport.js";
 import { fallbacksFor, getProvider, PROVIDERS } from "./providers.js";
 import { outlineSchema, sectionMessages, tldrMessages, tldrSchema, wholeDocumentMessages } from "./prompts.js";
+import { paperOutline } from "./model-sections.js";
 import { hasRoomFor, hongKongText, record, resetsAtText } from "../store/quota.js";
 
 // Enough to keep a per-section run busy without tripping a per-minute limit.
@@ -28,9 +29,11 @@ const CONCURRENCY = 3;
  *   fallback moves the run to another provider of the same destination
  * @param {AbortSignal} [args.signal]
  * @param {string[]} [args.order] the reader's provider order, for fallback
+ * @param {{page, y, str}[]} [args.paper] the whole paper in reading order, for
+ *   a provider that chooses its own sections (model-sections.js)
  * @returns {Promise<{sections, tldr, providerId, model, strategy, usage}>}
  */
-export async function outline({ sections, providerId, resolveKey, meta, onProgress, onAlive, onProviderChange, signal, order }) {
+export async function outline({ sections, providerId, resolveKey, meta, onProgress, onAlive, onProviderChange, signal, order, paper }) {
   // CLAUDE.md keeps empty-text sections (a parent heading whose first subsection
   // follows immediately) because they carry the paper's structure. They cannot
   // be summarised and are never sent; they come back bullet-less, in place.
@@ -50,7 +53,10 @@ export async function outline({ sections, providerId, resolveKey, meta, onProgre
     tried.push(id);
     if (tried.length > 1) onProviderChange?.(id);
     try {
-      const result = await run({ id, sendable, resolveKey, meta, onProgress, onAlive, signal });
+      const result = await run({ id, sendable, resolveKey, meta, onProgress, onAlive, signal, paper });
+      // A model that chose its own sections answered for the paper, not for
+      // the extracted sections, so there is nothing to reinsert.
+      if (result.modelSections) return result;
       return { ...result, sections: reinsertEmpty(sections, sendable, result.sections) };
     } catch (err) {
       if (!isFallbackWorthy(err)) throw err;
@@ -95,7 +101,7 @@ function otherDestinationIds(providerId) {
   return Object.keys(PROVIDERS).filter((id) => PROVIDERS[id].destination !== destination);
 }
 
-async function run({ id, sendable, resolveKey, meta, onProgress, onAlive, signal }) {
+async function run({ id, sendable, resolveKey, meta, onProgress, onAlive, signal, paper }) {
   const provider = getProvider(id);
   // Asked before the key is even read: a run that cannot finish inside the
   // day's remaining requests should move to the next provider rather than
@@ -135,15 +141,22 @@ async function run({ id, sendable, resolveKey, meta, onProgress, onAlive, signal
   };
 
   const produced =
-    provider.strategy === "whole-document"
-      ? await wholeDocument({ id, sendable, meta, call, onProgress })
-      : await perSection({ id, sendable, meta, call, onProgress });
+    usesPaper(provider, paper)
+      ? await paperOutline({ id, provider, paper, meta, call, onProgress })
+      : provider.strategy === "whole-document"
+        ? await wholeDocument({ id, sendable, meta, call, onProgress })
+        : await perSection({ id, sendable, meta, call, onProgress });
 
   return { ...produced, usage, providerId: id, model: provider.model, strategy: provider.strategy };
 }
 
 // One request carrying the whole paper: cheapest in tokens, one TL;DR written
 // with the full text in context, and one request to account for.
+// Only a whole-document provider can be handed the paper and asked for its
+// sections; a per-section one is sent the extracted sections by definition.
+export const usesPaper = (provider, paper) =>
+  provider.sections === "model" && provider.strategy === "whole-document" && Array.isArray(paper) && paper.length > 0;
+
 async function wholeDocument({ id, sendable, meta, call, onProgress }) {
   const onPartial = onProgress
     ? (partials) => onProgress({ sections: partialSections(sendable, partials) })

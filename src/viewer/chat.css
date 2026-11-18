@@ -210,3 +210,23 @@
 .chat-where-warn {
   color: var(--danger);
 }
+
+/* "Start a new chat?" — asked in the pane, above the box. */
+.chat-new-prompt {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg-raised);
+}
+
+.chat-new-prompt p {
+  margin: 0;
+}
+
+.chat-new-row {
+  display: flex;
+  gap: 8px;
+}

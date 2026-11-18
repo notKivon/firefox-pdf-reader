@@ -3,7 +3,7 @@
 // Three paths, in order of trust: the PDF's own bookmarks, heading heuristics
 // over the text layer, and a page-range chunking fallback. A degraded outline
 // beats an error.
-import { MAX_SECTIONS, SCANNED_CHARS_PER_PAGE, buildSections, chunkSections } from "./assemble.js";
+import { MAX_SECTIONS, SCANNED_CHARS_PER_PAGE, buildSections, chunkSections, lineRecords } from "./assemble.js";
 
 // SPEC's vocabulary, matched case-insensitively and allowing a trailing colon.
 const VOCABULARY = [
@@ -55,16 +55,34 @@ function truncateAtReferences(lines) {
   return cut < 0 ? lines : lines.slice(0, cut);
 }
 
+// IEEE subsections: "A. Key Findings". A single capital and a dot, then a word —
+// accepted only where the line is already set apart from body text, since a
+// body line can begin "A. Smith showed…".
+const LETTER_PREFIX = /^[A-H]\.\s+\p{Lu}/u;
+// IEEE sections: "IV. RESULTS", set in small capitals of the body face at body
+// size, so neither the size nor the face test sees them. A Roman numeral and
+// nothing but capitals after it is a heading in any face.
+const ROMAN_CAPS = /^[IVX]{1,4}\.\s+[\p{Lu}\d][\p{Lu}\d\s&,:'’-]*$/u;
+// A numbered sentence is a list item, not a heading: "1. Feature-aware splitting
+// improves early-stage ranking." or one cut at a hyphenated line break ("The
+// Kurtosis-"). Headings end on a word, or on a colon when run in.
+const SENTENCE_LIKE = /(?:[.!?]|\p{Ll}-|\.\s+\p{Lu}.*)$/u;
+
 // SPEC's rule, with "set in a face other than the body face" standing in for
 // the bold font-name test pdf.js cannot answer. See modalFontName().
 export function isHeading(line, { bodyHeight, bodyFont }) {
   if (line.str.length >= MAX_HEADING_CHARS || !HAS_WORD.test(line.str)) return false;
   if (line.height < MIN_HEADING_HEIGHT_RATIO * bodyHeight) return false;
+  if (ROMAN_CAPS.test(line.str)) return true;
   const distinguished =
     line.height > HEADING_HEIGHT_RATIO * bodyHeight || (bodyFont && line.fontName !== bodyFont);
   if (!distinguished) return false;
-  return NUMBER_PREFIX.test(line.str) || inVocabulary(line.str);
+  if (inVocabulary(line.str)) return true;
+  if (SENTENCE_LIKE.test(line.str.replace(NUMBER_PREFIX_ONLY, ""))) return false;
+  return NUMBER_PREFIX.test(line.str) || LETTER_PREFIX.test(line.str);
 }
+
+const NUMBER_PREFIX_ONLY = /^(\d{1,2}(\.\d{1,2}){0,3}|[IVXL]{1,5}|[A-H])[.)]\s+/;
 
 // Bookmarks are a flat list of {title, page, y} once nested items are walked
 // and each destination resolved to a page index.
@@ -136,6 +154,9 @@ export async function extractSections(pdfDoc, laid, { bodyHeight, bodyFont, char
   const all = [];
   for (const page of laid.pages) all.push(...page.lines);
   const lines = truncateAtReferences(all);
+  // The whole paper, line by line in reading order and References already cut:
+  // what a provider that chooses its own sections reads (extract/anchor.js).
+  const paper = lineRecords(lines);
 
   // A scan has no text layer to work with. Say so and make no model call;
   // OCR is out of scope.
@@ -149,7 +170,7 @@ export async function extractSections(pdfDoc, laid, { bodyHeight, bodyFont, char
   if (bookmarks.length >= 2) {
     const sections = buildSections(bookmarks, lines);
     if (sections.length >= 2) {
-      return { sections, source: "bookmarks", scanned: false, headingCount: bookmarks.length };
+      return { sections, paper, source: "bookmarks", scanned: false, headingCount: bookmarks.length };
     }
   }
 
@@ -159,11 +180,12 @@ export async function extractSections(pdfDoc, laid, { bodyHeight, bodyFont, char
     lines,
   );
   if (sections.length >= 2) {
-    return { sections, source: "headings", scanned: false, headingCount: headings.length };
+    return { sections, paper, source: "headings", scanned: false, headingCount: headings.length };
   }
 
   return {
     sections: chunkSections(lines).slice(0, MAX_SECTIONS),
+    paper,
     source: "chunks",
     scanned: false,
     headingCount: headings.length,

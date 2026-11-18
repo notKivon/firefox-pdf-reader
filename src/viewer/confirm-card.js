@@ -35,7 +35,14 @@ function destinationLine(plan) {
 // "What exactly gets sent" deserves an honest answer, and the section titles are
 // the short one. The References cutoff has already run, so this list is what
 // goes — nothing more.
-function whatGetsSent(titles) {
+function whatGetsSent(titles, modelSections) {
+  if (modelSections) {
+    return el(
+      "p",
+      "confirm-meta",
+      "What gets sent: the whole paper as extracted, up to the References. The model chooses its sections.",
+    );
+  }
   const box = el("details", "confirm-what");
   box.append(el("summary", null, `What gets sent — ${plural(titles.length, "section")}`));
   const list = el("ol", "confirm-titles");
@@ -58,7 +65,7 @@ export function confirmCard(plan, { onConfirm, onPickProvider }) {
       "p",
       "confirm-meta",
       [
-        plural(plan.sectionCount, "section"),
+        plan.modelSections ? "sections chosen by the model" : plural(plan.sectionCount, "section"),
         `~${plan.estTokens.toLocaleString("en")} tokens`,
         plural(plan.requests, "request"),
       ].join(" · "),
@@ -68,7 +75,7 @@ export function confirmCard(plan, { onConfirm, onPickProvider }) {
   if (plan.estCost !== null && plan.estCost !== undefined) {
     card.append(el("p", "confirm-cost", costLine(plan.estCost)));
   }
-  card.append(whatGetsSent(plan.sectionTitles));
+  card.append(whatGetsSent(plan.sectionTitles, plan.modelSections));
 
   // Said before the click rather than discovered after it. The button stays
   // live regardless: consent is permission, not success, and a grant recorded

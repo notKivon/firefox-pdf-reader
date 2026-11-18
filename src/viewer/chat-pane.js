@@ -6,7 +6,7 @@
 // model, then sends. The router re-reads that grant itself before any call
 // (background/chat.js), so nothing leaves without one on record.
 import { ask } from "./ask.js";
-import { disclosure, messageNode } from "./chat-render.js";
+import { disclosure, messageNode, newChatPrompt } from "./chat-render.js";
 import { el } from "./el.js";
 import { errorBox } from "./pane-error.js";
 
@@ -33,7 +33,8 @@ export function createChatPane({ root, onJump }) {
   sendButton.type = "button";
   const picker = el("select", "chat-model");
   picker.setAttribute("aria-label", "Model");
-  const clearButton = el("button", "confirm-alt-go chat-clear", "Clear");
+  const clearButton = el("button", "confirm-alt-go chat-new", "New chat");
+  clearButton.title = "Clear this conversation and start a new one";
   clearButton.type = "button";
 
   const head = el("div", "chat-head");
@@ -141,26 +142,28 @@ export function createChatPane({ root, onJump }) {
     pending.replaceChildren(messageNode({ role: "assistant", content: message.text }, sections(), onJump));
   }
 
-  let confirming = false;
+  // New chat: the conversation is stored per paper, so starting over clears
+  // it. Asked once in the pane, never with a dialog; nothing to ask when the
+  // conversation is already empty.
+  function startOver() {
+    return ask({ type: "chat-clear", hash: doc.hash }).then(() => {
+      history = [];
+      notice.replaceChildren();
+      input.value = "";
+      drawLog();
+      input.focus?.();
+    });
+  }
   clearButton.addEventListener("click", () => {
-    if (!history.length) return;
-    if (!confirming) {
-      confirming = true;
-      clearButton.textContent = "Clear the whole conversation?";
-      setTimeout(() => {
-        confirming = false;
-        clearButton.textContent = "Clear";
-      }, 4000);
-      return;
-    }
-    confirming = false;
-    clearButton.textContent = "Clear";
-    ask({ type: "chat-clear", hash: doc.hash })
-      .then(() => {
-        history = [];
-        drawLog();
-      })
-      .catch(fail);
+    if (busy || !doc) return;
+    if (!history.length) return startOver().catch(fail);
+    notice.replaceChildren(
+      newChatPrompt({
+        count: history.filter((m) => m.role === "user").length,
+        onConfirm: () => startOver().catch(fail),
+        onCancel: () => notice.replaceChildren(),
+      }),
+    );
   });
   sendButton.addEventListener("click", () => submit().catch(fail));
   input.addEventListener("keydown", (event) => {
@@ -200,5 +203,13 @@ export function createChatPane({ root, onJump }) {
   }
 
   message("Waiting for the text layer…");
-  return { start, progress, fail: (text) => message(text) };
+  // Once an outline is up, chat is sent the sections it shows and its § links
+  // point at them; until then, the extraction's own.
+  function useSections(next) {
+    if (!doc || !next?.length) return;
+    doc = { ...doc, sections: next };
+    if (log.isConnected !== false) drawLog();
+  }
+
+  return { start, progress, useSections, fail: (text) => message(text) };
 }
