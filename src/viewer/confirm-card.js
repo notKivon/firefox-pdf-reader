@@ -7,6 +7,7 @@
 // auto-dismiss and no timeout: the paper reads in the left pane regardless,
 // which is what makes blocking here acceptable.
 import { el } from "./el.js";
+import { modelPicker } from "./provider-switch.js";
 
 const DESTINATION_NAMES = { google: "Google", anthropic: "Anthropic", local: "this machine" };
 
@@ -81,18 +82,13 @@ export function confirmCard(plan, { onConfirm, onPickProvider }) {
   go.addEventListener("click", () => onConfirm());
   card.append(go);
 
-  if (plan.alternatives?.length) {
-    const alt = el("div", "confirm-alt");
-    alt.append(el("span", "confirm-alt-label", "Or send it somewhere else:"));
-    for (const other of plan.alternatives) {
-      const button = el("button", "confirm-alt-go", other.label);
-      button.type = "button";
-      // Another destination is a different thing being sent somewhere, so this
-      // re-plans and asks again rather than proceeding.
-      button.addEventListener("click", () => onPickProvider(other.id));
-      alt.append(button);
-    }
-    card.append(alt);
-  }
+  // Another destination is a different thing being sent somewhere, so picking
+  // one re-plans and asks again rather than proceeding.
+  const alt = modelPicker(plan.alternatives, {
+    label: "Or send it somewhere else:",
+    onPick: onPickProvider,
+    className: "confirm-alt",
+  });
+  if (alt) card.append(alt);
   return card;
 }

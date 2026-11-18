@@ -1,3 +1,4 @@
+import "./test-providers.mjs";
 // One partition for everything that persists: the background's.
 //
 // A tab in a container (Zen workspaces use them) gets its own partition of

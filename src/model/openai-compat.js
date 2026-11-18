@@ -185,7 +185,9 @@ function toError(status, detail, retryAfterHeader, providerId, provider) {
     });
   }
   return new ProviderError(
-    `${provider.label} returned ${response.status}${detail ? `: ${detail}` : ""}`,
+    provider.bridge
+      ? `${provider.label} returned ${response.status}.${bridgeDetail(provider, detail)}`
+      : `${provider.label} returned ${response.status}${detail ? `: ${detail}` : ""}`,
     { kind: "http", providerId, status: response.status },
   );
 }
@@ -194,6 +196,11 @@ function toError(status, detail, retryAfterHeader, providerId, provider) {
 // reader; a public API's are not, so only the bridge's are shown on these paths.
 function bridgeDetail(provider, detail) {
   if (!provider.bridge || !detail) return "";
+  // A bridge started before the chat tab existed (step 22) asks every request
+  // for a schema. It is still running old code; the fix is a restart.
+  if (/JSON schema is required/.test(detail)) {
+    return " The bridge is running older code than the extension: stop it with Ctrl+C and run `npm run bridge` again.";
+  }
   try {
     const message = JSON.parse(detail)?.error?.message;
     return message ? ` ${message}` : "";

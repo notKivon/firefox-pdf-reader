@@ -1,38 +1,67 @@
-// Changing model on an outline that has already been generated.
+// Choosing another model, as one dropdown (2026-11-18, at the user's request;
+// it was a row of buttons). Used in three places: under a finished outline
+// ("outline this paper with…"), on the confirm card and in the error state
+// ("or send it somewhere else"). Those last two offer the OTHER DESTINATIONS,
+// because they are the moments CLAUDE.md requires a deliberate choice to be
+// available at.
 //
-// The confirm card and the error state each offer the OTHER DESTINATIONS,
-// because those are the two moments CLAUDE.md requires a deliberate choice to be
-// available at. This is a third moment and a wider list: once an outline is on
-// screen, "read this paper through a different model" is an ordinary thing to
-// want, and it should not require closing the tab or revoking a grant.
-//
-// Nothing here decides anything. It re-plans, and the plan does what it always
-// does: a model whose cache already holds this paper renders from it with no
-// request, one with a grant sends, and one with neither asks first. Crossing to
-// the local model is the same act as any other switch — its own cache key, so
-// its own confirmation.
+// Nothing here decides anything. Picking re-plans, and the plan does what it
+// always does: a model whose cache already holds this paper renders from it
+// with no request, one with a grant sends, and one with neither asks first.
 import { el } from "./el.js";
 
-const DESTINATION_NOTE = { local: "on this machine", google: "Google" };
+const GROUPS = [
+  ["anthropic", "Anthropic — via Claude Code"],
+  ["google", "Google"],
+  ["local", "On this machine"],
+];
 
 /**
+ * @param {{id: string, label: string, destination: string}[]} options
+ * @param {object} args
+ * @param {string} args.label what choosing does, shown before the dropdown
+ * @param {(providerId: string) => void} args.onPick
+ * @param {string} [args.className] the wrapper's class
+ * @returns {HTMLElement|null} null when there is nothing to choose
+ */
+export function modelPicker(options, { label, onPick, className = "outline-switch" }) {
+  if (!options?.length) return null;
+  const box = el("div", className);
+  const select = el("select", "model-picker");
+  select.setAttribute("aria-label", label);
+
+  const prompt = el("option", null, "Choose a model…");
+  prompt.value = "";
+  prompt.disabled = true;
+  prompt.selected = true;
+  select.append(prompt);
+
+  const known = new Set(GROUPS.map(([destination]) => destination));
+  for (const [destination, name] of [...GROUPS, ...[...new Set(options.map((o) => o.destination))].filter((d) => !known.has(d)).map((d) => [d, d])]) {
+    const members = options.filter((option) => option.destination === destination);
+    if (!members.length) continue;
+    const group = el("optgroup");
+    group.label = name;
+    for (const { id, label: text } of members) {
+      const option = el("option", null, text.replace(/\s*\(via Claude Code\)$/, ""));
+      option.value = id;
+      group.append(option);
+    }
+    select.append(group);
+  }
+
+  select.addEventListener("change", () => {
+    if (select.value) onPick(select.value);
+  });
+  box.append(el("span", "outline-switch-label", label), select);
+  return box;
+}
+
+/**
+ * Under a finished outline: every other model, this one's destination included.
  * @param {object} plan the router's `plan` response for the model in use
  * @param {(providerId: string) => void} onPick
- * @returns {HTMLElement|null} null when there is nothing to switch to
  */
 export function providerSwitch(plan, onPick) {
-  const others = plan?.otherProviders ?? [];
-  if (others.length === 0) return null;
-
-  const box = el("div", "outline-switch");
-  box.append(el("span", "outline-switch-label", "Outline this paper with:"));
-
-  for (const other of others) {
-    const where = DESTINATION_NOTE[other.destination] ?? other.destination;
-    const button = el("button", "outline-switch-go", `${other.label} — ${where}`);
-    button.type = "button";
-    button.addEventListener("click", () => onPick(other.id));
-    box.append(button);
-  }
-  return box;
+  return modelPicker(plan?.otherProviders, { label: "Outline this paper with:", onPick });
 }

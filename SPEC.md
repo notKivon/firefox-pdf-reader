@@ -225,7 +225,9 @@ The escape hatch above, taken — by Ollama rather than by Gemini, and for a dif
 ## Chat tab (step 22)
 - `model/chat-prompt.js`: `CHAT_PROMPT_VERSION`, `chatMessages(sections, meta, history, question)`, `splitCitations(text, sections)` (case- and space-insensitive title match; unmatched citations stay as text).
 - `model/openai-compat.js#chatText`: the same POST without `response_format`, streamed as text; `onText` gets the whole reply so far.
-- `background/chat.js`: `chat-plan`, `chat` (gate, then stream `chat-progress` to the tab, then `appendTurn`), `chat-history`, `chat-clear`. Watchdog as for outlines.
+- `background/chat.js`: `chat-plan`, `chat` (gate, quota check, then stream `chat-progress` to the tab, count the request, then `appendTurn`), `chat-history`, `chat-clear`. Watchdog as for outlines. `canChat`: any provider without `useNativeEndpoint`.
+- Consent (2026-11-18): Send is the approval. `viewer/chat-render.js#disclosure` is the line above the box; on Send, the pane asks the router for a `grant` of kind `chat` when the plan has none, then sends.
+- Model choice everywhere is one `<select>` grouped by destination (`viewer/provider-switch.js#modelPicker`): under a finished outline, on the confirm card, and in the error state.
 - `store/chats.js`: `{hash, messages: [{role, content, providerId, model, at}], updatedAt}`, capped at 60 messages.
 - `viewer/pane-tabs.js` (Outline | Chat, remembered in `storage.local` as `paneTab`), `viewer/chat-pane.js` (states, composer, model picker, two-click Clear), `viewer/chat-render.js` (reply paragraphs and `- ` lists as DOM, citation links, the approval card), `viewer/chat.css`.
 - Bridge: no schema means text mode. Text blocks are streamed, `result.result` is final, and earlier turns go into the prompt as a transcript, because `claude -p` takes one prompt.

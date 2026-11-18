@@ -33,6 +33,14 @@ export class FakeNode {
     };
   }
   click() { for (const fn of this.listeners.click ?? []) fn(); }
+  // A <select>'s choice, as the browser reports it: value set, then "change".
+  choose(value) { this.value = value; for (const fn of this.listeners.change ?? []) fn(); }
+  // Real options under a dropdown — the "Choose a model…" prompt has no value.
+  options(out = []) {
+    if (this.tag === "option" && this.value) out.push(this);
+    for (const child of this.children) child.options?.(out);
+    return out;
+  }
   keydown(key) {
     let defaultPrevented = false;
     const event = { key, preventDefault() { defaultPrevented = true; } };

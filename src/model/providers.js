@@ -26,33 +26,17 @@ export const PROVIDERS = {
   "claude-opus": claudeVia("Claude Opus 5.5", "claude-opus-5-5", "guidelines"),
   "claude-sonnet": claudeVia("Claude Sonnet 5.5", "claude-sonnet-5-5", "guidelines"),
   "claude-haiku": claudeVia("Claude Haiku 5.5", "claude-haiku-5-5", "strict"),
-  "gemini-prod": {
-    label: "Gemini 3.8 Flash",
-    baseUrl: "https://generativelanguage.googleapis.com/v1beta/openai/",
-    model: "gemini-3.8-flash",
-    keyRef: "gemini",
-    destination: "google",
-    strategy: "whole-document",
-    limits: { rpd: 10_000, rpm: 1_000, tpm: 2_000_000 },
-    // Promotional pricing; doubles to 1.50 / 7.50 on 2027-01-01.
-    pricing: { inPerM: 0.75, outPerM: 3.75 },
-    params: { reasoning_effort: "low" },
-    supports: { jsonSchema: true, streaming: true, reasoningOff: false },
-  },
-  "gemini-dev": {
-    label: "Gemini 3.5 Flash-Lite (development)",
-    baseUrl: "https://generativelanguage.googleapis.com/v1beta/openai/",
-    model: "gemini-3.5-flash-lite",
-    keyRef: "gemini",
-    destination: "google",
-    strategy: "per-section",
-    limits: { rpd: 150_000, rpm: 4_000, tpm: 4_000_000 },
-    // Not filled in: the user's per-token price for flash-lite has not been
-    // read off the console, and a guessed number on the confirm card would be
-    // worse than none. The card omits the cost line when pricing is null.
-    pricing: null,
-    supports: { jsonSchema: true, streaming: true, reasoningOff: true },
-  },
+  // Gemini 4, added 2026-11-18 at the user's request. The three ids are the ones
+  // the user's key lists at /v1beta/openai/models; Google's model card says
+  // nothing about which is the larger, so they keep Google's own names. A tiny
+  // structured-output call to each streamed and decoded cleanly the same day.
+  // They replaced Gemini 3.8 Flash and 3.5 Flash-Lite, removed at the user's
+  // request the same day. Not in FALLBACK_ORDER: chosen explicitly. Limits and
+  // pricing are not filled in — not read off the console yet, and a guess on the
+  // confirm card would be worse than no line.
+  "gemini-4-argon": gemini4("Gemini 4 Argon", "gemini-4-argon"),
+  "gemini-4-carbon": gemini4("Gemini 4 Carbon", "gemini-4-carbon"),
+  "gemini-4-hydrogen": gemini4("Gemini 4 Hydrogen", "gemini-4-hydrogen"),
   ollama: {
     label: "Gemma 4 E4B (local)",
     baseUrl: "http://127.0.0.1:11434/v1/",
@@ -74,6 +58,21 @@ export const PROVIDERS = {
     supports: { jsonSchema: true, streaming: true, reasoningOff: true },
   },
 };
+
+function gemini4(label, model) {
+  return {
+    label,
+    baseUrl: "https://generativelanguage.googleapis.com/v1beta/openai/",
+    model,
+    keyRef: "gemini",
+    destination: "google",
+    strategy: "whole-document",
+    limits: null,
+    pricing: null,
+    promptStyle: "guidelines",
+    supports: { jsonSchema: true, streaming: true, reasoningOff: false },
+  };
+}
 
 function claudeVia(label, model, promptStyle) {
   return {
@@ -104,10 +103,11 @@ export const DEFAULT_PROVIDER_ID = "claude-opus";
 // already given still covers it — and reaching the local model is an explicit
 // act, offered as a control when the Google chain runs out.
 //
-// Sonnet and Haiku are not in it either: dropping to a smaller model is the
-// reader's call, made in settings or from the pane, never a quiet consequence
-// of Opus hitting its usage limit.
-export const FALLBACK_ORDER = ["claude-opus", "gemini-prod", "gemini-dev"];
+// Only the ids listed here are ever reached automatically, whatever the reader's
+// order says (`fallbacksFor`). Since 2026-11-18 that is Opus alone, so nothing
+// is: Sonnet, Haiku and every Gemini model are the reader's choice, made in
+// settings or from the pane, never a quiet consequence of a usage limit.
+export const FALLBACK_ORDER = ["claude-opus"];
 
 /**
  * @param {string} id key into PROVIDERS
@@ -140,6 +140,6 @@ export function getProvider(id) {
 export function fallbacksFor(id, order = FALLBACK_ORDER) {
   const { destination } = getProvider(id);
   const from = order.indexOf(id);
-  const rest = from === -1 ? order : order.slice(from + 1);
+  const rest = (from === -1 ? order : order.slice(from + 1)).filter((other) => FALLBACK_ORDER.includes(other));
   return rest.filter((other) => other !== id && getProvider(other).destination === destination);
 }

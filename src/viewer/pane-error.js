@@ -10,6 +10,7 @@
 // chain: state the problem and *offer* another destination, as a choice, never
 // as an automatic fallback.
 import { el } from "./el.js";
+import { modelPicker } from "./provider-switch.js";
 
 /**
  * @param {string} text what went wrong, in words
@@ -37,16 +38,13 @@ export function errorBox(text, { retry, plan, onPickProvider, details } = {}) {
     box.append(button);
   }
 
-  if (plan?.alternatives?.length && onPickProvider) {
-    const alt = el("div", "confirm-alt");
-    alt.append(el("span", "confirm-alt-label", "Or send it somewhere else:"));
-    for (const other of plan.alternatives) {
-      const button = el("button", "confirm-alt-go", other.label);
-      button.type = "button";
-      button.addEventListener("click", () => onPickProvider(other.id));
-      alt.append(button);
-    }
-    box.append(alt);
+  if (onPickProvider) {
+    const alt = modelPicker(plan?.alternatives, {
+      label: "Or send it somewhere else:",
+      onPick: onPickProvider,
+      className: "confirm-alt",
+    });
+    if (alt) box.append(alt);
   }
   return box;
 }

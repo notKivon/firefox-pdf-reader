@@ -1,3 +1,4 @@
+import "./test-providers.mjs";
 // Step 14: settings, the escape hatch, local files, and the stall watchdog.
 // What is pinned is what could be wrong without anything on screen saying so:
 // a stored order that moves the local model into an automatic path, an opt-out
@@ -68,7 +69,7 @@ await test("plan with no provider named uses the first of the reader's order", a
   assert.equal(detail.providerId, "gemini-dev");
   assert.deepEqual(
     detail.otherProviders.map((p) => p.id),
-    ["gemini-prod", "claude-opus", "ollama", "claude-sonnet", "claude-haiku"],
+    ["gemini-prod", "claude-opus", "ollama", "claude-sonnet", "claude-haiku", "gemini-4-argon", "gemini-4-carbon", "gemini-4-hydrogen"],
   );
   await setProviderOrder(DEFAULT_ORDER);
 });

@@ -1,6 +1,6 @@
 // Step 13: the production provider, end to end through the real router.
 //
-// Spends real quota (~1–5¢ a paper on gemini-prod). Run it by hand:
+// Spends real quota on the chosen provider. Run it by hand:
 //
 //   node tools/prod-check.mjs                    # gpt3, the 32-section stress case
 //   node tools/prod-check.mjs --fixture adam,bert
@@ -28,7 +28,7 @@ installIndexedDb();
 
 const args = process.argv.slice(2);
 const flag = (name) => { const i = args.indexOf(`--${name}`); return i === -1 ? undefined : args[i + 1]; };
-const providerId = flag("provider") ?? "gemini-prod";
+const providerId = flag("provider") ?? "gemini-4-hydrogen";
 const fixtures = args.includes("--all")
   ? readdirSync(new URL("../fixtures/", import.meta.url)).filter((f) => f.endsWith(".json")).map((f) => f.slice(0, -5))
   : (flag("fixture") ?? "gpt3").split(",");

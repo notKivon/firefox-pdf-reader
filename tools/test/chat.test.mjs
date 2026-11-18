@@ -1,3 +1,4 @@
+import "./test-providers.mjs";
 // The chat tab (step 22): nothing leaves without its own approval, the gate is
 // the router's, the conversation is kept per paper, and a section link's target
 // is the extracted section's — never anything the model said.
@@ -54,7 +55,7 @@ await test("a question without a chat approval is refused and sends nothing", as
   assert.equal(calls.length, 0);
 });
 
-await test("an outline approval does not cover chat, and chat needs a Claude model", async () => {
+await test("an outline approval does not cover chat, and the local model does not chat", async () => {
   const hash = hashOf("2");
   await ask({ type: "grant", hash, providerId: "claude-opus", cacheKey: cacheKey(hash, "claude-opus") });
   const calls = say("never");
@@ -62,7 +63,7 @@ await test("an outline approval does not cover chat, and chat needs a Claude mod
   assert.equal(answer.error, "consent-required", "a different thing is being sent");
   assert.equal(calls.length, 0);
   await assert.rejects(
-    ask({ type: "grant", kind: "chat", hash, providerId: "gemini-prod", cacheKey: chatKey(hash, "gemini-prod") }),
+    ask({ type: "grant", kind: "chat", hash, providerId: "ollama", cacheKey: chatKey(hash, "ollama") }),
     /does not chat/,
   );
   await assert.rejects(ask({ type: "chat-plan", hash, sections, meta, providerId: "ollama" }), /does not chat/);
@@ -119,25 +120,25 @@ await test("citations link only to sections that exist, at the extraction's posi
   ]);
 });
 
-await test("the pane asks first, then sends, renders links and jumps to the section", async () => {
+await test("the pane says where Send goes, and Send records the grant and sends", async () => {
   const hash = hashOf("5");
   const jumps = [];
   const root = new FakeNode("div");
   chatPane = createChatPane({ root, onJump: (t) => jumps.push(t) });
   await chatPane.start({ hash, meta, sections, scanned: false });
   for (let i = 0; i < 20 && !root.find("chat-input"); i++) await settle();
+  assert.match(root.find("chat-where").textContent, /Send shares this paper .* with Anthropic \(Claude Opus 5\.5\), through Claude Code/);
   const input = root.find("chat-input");
   input.value = "What is new?";
   const calls = say("It corrects bias [§ 3 INITIALIZATION BIAS CORRECTION].");
-  root.find("chat-send").click();
-  for (let i = 0; i < 20 && !root.find("chat-card"); i++) await settle();
-  assert.ok(root.find("chat-card"), "the approval is a state of the pane");
-  assert.match(root.find("chat-card").textContent, /Sent to Anthropic/);
-  assert.equal(calls.length, 0, "nothing before the approval");
+  assert.equal(calls.length, 0, "nothing before Send");
 
-  root.find("chat-card").find("confirm-go").click();
+  root.find("chat-send").click();
   for (let i = 0; i < 50 && !root.find("chat-cite"); i++) await settle();
+  assert.equal(root.find("chat-card"), null, "no second confirmation: Send is the approval");
   assert.equal(calls.length, 1);
+  const { consents } = await ask({ type: "consents" });
+  assert.ok(consents.some((c) => c.key === chatKey(hash, "claude-opus") && c.kind === "chat"), "the grant is on record");
   const cite = root.find("chat-cite");
   assert.ok(cite, root.textContent);
   cite.click();
@@ -145,6 +146,38 @@ await test("the pane asks first, then sends, renders links and jumps to the sect
   assert.deepEqual(jumps, [{ page: section.page, y: section.y }], "the target is the extracted section's");
   assert.equal(input.value, "", "the box empties once answered");
   chatPane = null;
+});
+
+await test("Gemini 4 chats too: straight to Google with the Gemini key, counted", async () => {
+  const hash = hashOf("7");
+  const { used } = await import("../../src/store/quota.js");
+  const before = await used("gemini-4-hydrogen");
+  await ask({ type: "grant", kind: "chat", hash, providerId: "gemini-4-hydrogen", cacheKey: chatKey(hash, "gemini-4-hydrogen") });
+  const calls = say("An answer.");
+  const answer = await ask({ type: "chat", hash, sections, meta, providerId: "gemini-4-hydrogen", question: "Q?" });
+  assert.equal(answer.reply, "An answer.");
+  assert.equal(calls[0].url, "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions");
+  assert.equal(calls[0].model, "gemini-4-hydrogen");
+  assert.equal(calls[0].headers.Authorization, "Bearer test-key-not-a-real-one");
+  assert.equal(await used("gemini-4-hydrogen"), before + 1);
+  const plan = await ask({ type: "chat-plan", hash, sections, meta, providerId: "gemini-4-hydrogen" });
+  assert.equal(plan.destination, "google");
+  assert.ok(plan.providers.every((p) => p.id !== "ollama"), "the local model does not chat");
+});
+
+await test("Opus at its usage limit stops; no other model is tried on its own", async () => {
+  const { outline } = await import("../../src/model/adapter.js");
+  const { DEFAULT_ORDER } = await import("../../src/store/settings.js");
+  const calls = installFetch(() => new Response("{}", { status: 429 }));
+  await assert.rejects(
+    outline({ sections, providerId: "claude-opus", resolveKey: async () => "k", order: DEFAULT_ORDER }),
+    (err) => {
+      assert.equal(err.kind, "exhausted");
+      assert.deepEqual(err.tried, ["claude-opus"]);
+      return true;
+    },
+  );
+  assert.equal(calls.length, 1, "Sonnet and Haiku are the reader's choice, not a fallback");
 });
 
 await test("a scanned paper offers no chat and sends nothing", async () => {

@@ -1,11 +1,12 @@
 // The chat tab: ask questions about the open paper.
 //
-// The order of a first send mirrors the outline's: the question is held, the
-// approval card is the pane's state, the router records the grant, and only
-// then does anything leave. After that, a question goes straight to the router,
-// which re-reads the grant itself (background/chat.js).
+// Send is the approval (changed 2026-11-18 at the user's request): the line
+// above the box says where questions go and what goes with them, before the
+// first one. Pressing Send has the router record the grant for this paper and
+// model, then sends. The router re-reads that grant itself before any call
+// (background/chat.js), so nothing leaves without one on record.
 import { ask } from "./ask.js";
-import { chatCard, messageNode } from "./chat-render.js";
+import { disclosure, messageNode } from "./chat-render.js";
 import { el } from "./el.js";
 import { errorBox } from "./pane-error.js";
 
@@ -23,6 +24,7 @@ export function createChatPane({ root, onJump }) {
 
   const log = el("div", "chat-log");
   const notice = el("div", "chat-notice");
+  const where = el("p", "chat-where");
   const input = el("textarea", "chat-input");
   input.rows = 3;
   input.placeholder = "Ask about this paper…";
@@ -37,7 +39,7 @@ export function createChatPane({ root, onJump }) {
   const head = el("div", "chat-head");
   head.append(picker, clearButton);
   const composer = el("div", "chat-composer");
-  composer.append(notice, input, sendButton);
+  composer.append(notice, where, input, sendButton);
 
   const sections = () => doc?.sections ?? [];
   const setBusy = (value) => {
@@ -76,6 +78,7 @@ export function createChatPane({ root, onJump }) {
   async function replan(providerId) {
     plan = await ask({ type: "chat-plan", hash: doc.hash, sections: forSending(doc.sections), meta: doc.meta, providerId });
     drawPicker();
+    where.replaceChildren(...disclosure(plan));
   }
 
   async function submit() {
@@ -83,22 +86,10 @@ export function createChatPane({ root, onJump }) {
     if (!question || busy || !plan) return;
     notice.replaceChildren();
     if (!plan.consented) {
-      notice.replaceChildren(
-        chatCard(plan, {
-          onApprove: () => approve().catch(fail),
-          onCancel: () => notice.replaceChildren(),
-        }),
-      );
-      return;
+      await ask({ type: "grant", kind: "chat", hash: doc.hash, providerId: plan.providerId, cacheKey: plan.cacheKey });
+      plan = { ...plan, consented: true };
     }
     await send(question);
-  }
-
-  async function approve() {
-    await ask({ type: "grant", kind: "chat", hash: doc.hash, providerId: plan.providerId, cacheKey: plan.cacheKey });
-    plan = { ...plan, consented: true };
-    notice.replaceChildren();
-    await send(input.value.trim());
   }
 
   async function send(question) {

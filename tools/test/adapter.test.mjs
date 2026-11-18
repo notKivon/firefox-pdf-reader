@@ -1,3 +1,4 @@
+import "./test-providers.mjs";
 import assert from "node:assert/strict";
 import { readFileSync, readdirSync } from "node:fs";
 import { outline } from "../../src/model/adapter.js";

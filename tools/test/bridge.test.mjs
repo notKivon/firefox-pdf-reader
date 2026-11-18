@@ -1,3 +1,4 @@
+import "./test-providers.mjs";
 // The Claude bridge (tools/bridge/): who may use it, what it runs, and that its
 // stream reads back through the extension's own transport unchanged.
 //

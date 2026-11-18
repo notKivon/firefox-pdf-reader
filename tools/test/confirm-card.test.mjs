@@ -59,7 +59,7 @@ test("nothing happens until the button is pressed, and then exactly once", () =>
   card.find("confirm-go").click();
   assert.equal(confirms, 1);
   // Another destination re-plans and asks again; it never proceeds on its own.
-  card.find("confirm-alt-go").click();
+  card.find("model-picker").choose("ollama");
   assert.equal(picked, "ollama");
   assert.equal(confirms, 1, "choosing another destination is not a confirmation");
 });

@@ -1,3 +1,4 @@
+import "./test-providers.mjs";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { installIndexedDb } from "./idb.mjs";

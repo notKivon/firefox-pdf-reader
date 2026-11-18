@@ -1,3 +1,4 @@
+import "./test-providers.mjs";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { installIndexedDb } from "./idb.mjs";
@@ -58,7 +59,7 @@ await test("the default is Opus through the bridge, sent to Anthropic with no co
   assert.equal(detail.estCost, null, "a subscription has no per-token price");
   assert.deepEqual(
     detail.alternatives.map((a) => a.id),
-    ["gemini-prod", "gemini-dev", "ollama"],
+    ["gemini-prod", "gemini-dev", "gemini-4-argon", "gemini-4-carbon", "gemini-4-hydrogen", "ollama"],
     "other destinations are offered, never taken",
   );
   assert.equal(fetches, 0);

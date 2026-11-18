@@ -6,7 +6,7 @@
 //   mkdir -p ~/.config/scholar-reader
 //   pbpaste > ~/.config/scholar-reader/gemini.key     # or an editor
 //   chmod 600 ~/.config/scholar-reader/gemini.key
-//   node tools/live-probe.mjs --fixture adam --provider gemini-dev
+//   node tools/live-probe.mjs --fixture adam --provider gemini-4-hydrogen
 //
 // What it measures, per SPEC.md's "Schema enforcement" and "Output quality":
 //   - whether N sections in gives exactly N sections back;
@@ -33,7 +33,7 @@ const args = new Map();
 for (let i = 2; i < process.argv.length; i += 2) args.set(process.argv[i].replace(/^--/, ""), process.argv[i + 1]);
 
 const fixtureName = args.get("fixture") ?? "adam";
-const providerId = args.get("provider") ?? "gemini-dev";
+const providerId = args.get("provider") ?? "gemini-4-hydrogen";
 const keyFile = process.env.SCHOLAR_READER_KEY_FILE ?? `${homedir()}/.config/scholar-reader/gemini.key`;
 
 function loadKey() {

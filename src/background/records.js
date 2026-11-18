@@ -30,7 +30,7 @@ async function grant({ hash, providerId, cacheKey: shown, kind = "outline" }) {
   requireHash(hash);
   const provider = getProvider(providerId);
   if (kind !== "outline" && kind !== "chat") throw new Error("not a kind of send.");
-  if (kind === "chat" && !provider.bridge) throw new Error(`${provider.label} does not chat.`);
+  if (kind === "chat" && provider.useNativeEndpoint) throw new Error(`${provider.label} does not chat.`);
   const key = kind === "chat" ? chatKey(hash, providerId) : cacheKey(hash, providerId);
   if (shown !== key) {
     throw new Error("the approval was for a different send than the one this version would make. Reload the page and approve again.");

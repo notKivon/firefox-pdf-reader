@@ -1,3 +1,4 @@
+import "./test-providers.mjs";
 // Step 12: the local model behind the same adapter.
 //
 // What is worth pinning here is everything the OpenAI-compatible path does NOT

@@ -2,9 +2,14 @@
 // here, and the send-confirmation gate is this module's own read of the store:
 // a page that forgets to ask cannot cause a send (CLAUDE.md).
 //
-// Chat runs only on the Claude providers, through the bridge. They are the ones
-// with no per-request quota to spend, and the only ones whose transport speaks
-// plain text; the others stay outline-only.
+// Chat runs on every provider spoken to over the OpenAI-compatible wire: the
+// Claude ones through the bridge, and Gemini. Ollama's native transport has no
+// text mode, so the local model stays outline-only.
+//
+// Consent (changed 2026-11-18 at the user's request): pressing Send in the chat
+// tab is the approval. The tab states where questions go before the first one,
+// the page records the grant as Send is pressed, and this gate still refuses a
+// send with no grant on record — so a page that skips that step sends nothing.
 import { chatMessages } from "../model/chat-prompt.js";
 import { ProviderError } from "../model/errors.js";
 import { estimateTokens, totalChars } from "../model/estimate.js";
@@ -14,6 +19,7 @@ import { getApiKey } from "../store/apikeys.js";
 import { chatKey } from "../store/cache-key.js";
 import { appendTurn, chatHistory, clearChat } from "../store/chats.js";
 import { isConsented } from "../store/consent.js";
+import { hasRoomFor, record } from "../store/quota.js";
 import { providerOrder } from "./plan.js";
 import { createWatchdog } from "./watchdog.js";
 
@@ -21,7 +27,8 @@ const PROGRESS_MESSAGE = "chat-progress";
 const HASH_RE = /^[0-9a-f]{64}$/;
 const MAX_QUESTION = 8_000;
 
-const chatProviders = (order) => order.filter((id) => PROVIDERS[id]?.bridge);
+export const canChat = (provider) => !provider.useNativeEndpoint;
+const chatProviders = (order) => order.filter((id) => PROVIDERS[id] && canChat(PROVIDERS[id]));
 
 /** What a chat turn would send and where, for the pane's card. No network. */
 export async function chatPlan({ hash, sections, meta = {}, providerId }) {
@@ -29,7 +36,7 @@ export async function chatPlan({ hash, sections, meta = {}, providerId }) {
   const order = chatProviders(await providerOrder());
   const id = providerId ?? order[0];
   const provider = getProvider(id);
-  if (!provider.bridge) throw new Error(`${provider.label} does not chat; pick a Claude model.`);
+  if (!canChat(provider)) throw new Error(`${provider.label} does not chat; pick a Claude or Gemini model.`);
   const sendable = (sections ?? []).filter((section) => section.text?.trim());
   const key = chatKey(hash, id);
   return {
@@ -42,7 +49,7 @@ export async function chatPlan({ hash, sections, meta = {}, providerId }) {
     label: provider.label,
     model: provider.model,
     destination: provider.destination,
-    bridge: true,
+    bridge: provider.bridge === true,
     sectionCount: sendable.length,
     estTokens: estimateTokens(totalChars(sendable)),
     hasKey: Boolean(await getApiKey(provider.keyRef).catch(() => null)),
@@ -69,6 +76,13 @@ export async function runChat(request, tabId, { watchdog } = {}) {
   if (!(await isConsented(detail.cacheKey))) return { error: "consent-required", plan: detail };
 
   const provider = getProvider(detail.providerId);
+  if (!(await hasRoomFor(detail.providerId))) {
+    throw new ProviderError(`${provider.label} has used its daily quota of ${provider.limits.rpd} requests.`, {
+      kind: "rate-limit",
+      providerId: detail.providerId,
+      quota: true,
+    });
+  }
   const history = await chatHistory(request.hash);
   const messages = chatMessages(request.sections, request.meta, history, question);
   const tell = (text) => {
@@ -92,6 +106,8 @@ export async function runChat(request, tabId, { watchdog } = {}) {
       },
     });
   } catch (err) {
+    // A provider that answered counted the request, as in the adapter.
+    if (err instanceof ProviderError && err.status) await record(detail.providerId).catch(() => {});
     if (dog.fired) {
       throw new ProviderError(`${provider.label} stopped responding, so the question was abandoned.`, {
         kind: "stalled",
@@ -103,6 +119,7 @@ export async function runChat(request, tabId, { watchdog } = {}) {
   } finally {
     dog.stop();
   }
+  await record(detail.providerId).catch((err) => console.warn("[scholar-reader] chat request not counted", err));
 
   // Saved only once the reply is whole: a failed turn leaves the conversation
   // as it was, and the question stays in the box to send again.

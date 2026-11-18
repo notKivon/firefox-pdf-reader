@@ -1,3 +1,4 @@
+import "./test-providers.mjs";
 // The send-confirmation gate (CLAUDE.md): nothing reaches a model unasked, the
 // grant is per cache key, and the check is the router's own — not the viewer's.
 import assert from "node:assert/strict";
@@ -122,7 +123,7 @@ await test("the plan the card renders carries everything CLAUDE.md requires it t
   );
   const local = await plan({ hash, sections, meta, providerId: "ollama" });
   assert.equal(local.host, "127.0.0.1:11434");
-  assert.deepEqual(local.alternatives.map((a) => a.id), ["gemini-prod", "gemini-dev", "claude-opus", "claude-sonnet", "claude-haiku"]);
+  assert.deepEqual(local.alternatives.map((a) => a.id), ["gemini-prod", "gemini-dev", "claude-opus", "claude-sonnet", "claude-haiku", "gemini-4-argon", "gemini-4-carbon", "gemini-4-hydrogen"]);
 });
 
 console.log(results.join("\n"));

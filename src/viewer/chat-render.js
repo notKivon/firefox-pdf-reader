@@ -1,5 +1,6 @@
 // Drawing the chat tab's pieces: a reply's text with its section links, and the
-// approval card. DOM calls only — a reply is model output, never markup.
+// line that says where questions go. DOM calls only — a reply is model output,
+// never markup.
 import { splitCitations } from "../model/chat-prompt.js";
 import { el } from "./el.js";
 
@@ -61,43 +62,28 @@ export function messageNode({ role, content, label }, sections, onJump) {
   return node;
 }
 
+const WHERE = {
+  anthropic: (plan) => `Anthropic (${plan.label.replace(/\s*\(via Claude Code\)$/, "")}), through Claude Code on your subscription`,
+  google: (plan) => `Google (${plan.label}), with your Gemini API key`,
+};
+
 /**
- * The approval, as a state of the pane (CLAUDE.md: never a modal). It says what
- * every question sends — the whole paper again, plus the conversation — and
- * where, before anything is sent.
+ * What pressing Send does, said before it is pressed: the whole paper goes again
+ * with every question, plus the conversation so far, and where it goes. Pressing
+ * Send is the approval, so this line is what the reader agrees to.
  */
-export function chatCard(plan, { onApprove, onCancel }) {
-  const card = el("div", "confirm-card chat-card");
-  card.append(
-    el("h2", "confirm-heading", "Chat about this paper?"),
-    el("p", "confirm-doc", plan.title || "Untitled document"),
+export function disclosure(plan) {
+  const where = (WHERE[plan.destination] ?? ((p) => `${p.destination} (${p.label})`))(plan);
+  const nodes = [
     el(
-      "p",
-      "confirm-meta",
-      [
-        `${plan.pageCount} pages`,
-        `${plan.sectionCount} sections`,
-        `~${plan.estTokens.toLocaleString("en")} tokens per question, est.`,
-      ].join(" · "),
+      "span",
+      null,
+      `Send shares this paper (~${plan.estTokens.toLocaleString("en")} tokens) and the conversation so far with ${where}.`,
     ),
-    el(
-      "p",
-      "confirm-dest",
-      `Sent to Anthropic — ${plan.label} (${plan.model}), through Claude Code on your subscription. ` +
-        "Each question sends the paper again, with the conversation so far.",
-    ),
-  );
+  ];
   if (!plan.hasKey) {
-    card.append(el("p", "confirm-warn", "No bridge token is stored yet — add one in settings."));
+    const missing = plan.bridge ? "No bridge token is stored yet" : "No Gemini API key is stored yet";
+    nodes.push(el("span", "chat-where-warn", ` ${missing} — add one in settings.`));
   }
-  const row = el("div", "chat-card-row");
-  const go = el("button", "confirm-go", "Send");
-  go.type = "button";
-  go.addEventListener("click", onApprove);
-  const cancel = el("button", "confirm-alt-go", "Not now");
-  cancel.type = "button";
-  cancel.addEventListener("click", onCancel);
-  row.append(go, cancel);
-  card.append(row);
-  return card;
+  return nodes;
 }
