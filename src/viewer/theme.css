@@ -1,24 +1,30 @@
-/* Dark is the default and lives on bare :root. [data-theme="light"] overrides
-   it — never the other way around. */
-/* A reading table under a lamp: green-black baize for the desk the pages lie
-   on, paper-white text, and brass for the one thing that marks where you are.
-   The light theme is the same table by daylight — cool paper, darker brass. */
+/* Dark is the default and lives on bare :root; [data-theme="light"] overrides
+   it, never the other way around. Deep navy for the desk the pages lie on, a
+   clear blue for the one thing that marks where you are. The light theme is the
+   same palette by daylight: blue-grey paper and a darker, more saturated blue. */
 :root {
   color-scheme: dark;
 
-  --bg: #121a17;
-  --bg-raised: #18221e;
-  --bg-sunken: #0c120f;
-  --bg-hover: #1f2b26;
-  --border: #26332d;
-  --text: #e4e6df;
-  --text-dim: #8d9a92;
-  --accent: #d4a94f;
-  --accent-ink: #1a1408;
-  --danger: #ef7a6a;
+  --bg: #0f1624;
+  --bg-raised: #152036;
+  --bg-sunken: #0a101b;
+  --bg-hover: #1c2a44;
+  --border: #233251;
+  --text: #e4ebf7;
+  --text-dim: #8e9cb8;
+  --accent: #5b9bff;
+  --accent-ink: #061226;
+  --danger: #ff7b86;
   --shadow: rgba(0, 0, 0, 0.5);
   --page-edge: rgba(0, 0, 0, 0.65);
   --page-gap: 18px;
+
+  /* One sans for everything, outline prose and the paper's name included.
+     Inter where it is installed, the platform's own UI face otherwise. The
+     math faces come last and are asked only for glyphs the sans lacks (see
+     PROGRESS.md: the symbol rendering issue). */
+  --sans: Inter, "SF Pro Text", -apple-system, BlinkMacSystemFont, "Helvetica Neue", "Segoe UI", Roboto,
+    Arial, "STIX Two Math", "Apple Symbols", "Arial Unicode MS", sans-serif;
 
   --toolbar-height: 42px;
   --outline-width: 360px;
@@ -27,18 +33,18 @@
 :root[data-theme="light"] {
   color-scheme: light;
 
-  --bg: #f3f4f0;
+  --bg: #eef3fa;
   --bg-raised: #ffffff;
-  --bg-sunken: #e2e5de;
-  --bg-hover: #e9ece5;
-  --border: #d2d7cd;
-  --text: #1a211d;
-  --text-dim: #59655e;
-  --accent: #8a6416;
+  --bg-sunken: #dce5f2;
+  --bg-hover: #e3ebf7;
+  --border: #c8d4e6;
+  --text: #13203a;
+  --text-dim: #4e5e7b;
+  --accent: #1f5fd6;
   --accent-ink: #ffffff;
-  --danger: #b53a2a;
-  --shadow: rgba(20, 30, 24, 0.16);
-  --page-edge: rgba(20, 30, 24, 0.14);
+  --danger: #c22f3d;
+  --shadow: rgba(16, 32, 64, 0.16);
+  --page-edge: rgba(16, 32, 64, 0.14);
 }
 
 html,
@@ -61,9 +67,7 @@ body {
      STIX Two Math leads because it is a real math face (4,605 glyphs, all of a
      15-symbol sample) and draws operators at text size and on the text
      baseline. Apple Symbols and Arial Unicode MS follow as backstops. */
-  font:
-    13px/1.5 system-ui, -apple-system, "Segoe UI", "STIX Two Math", "Apple Symbols", "Arial Unicode MS",
-    sans-serif;
+  font: 13px/1.5 var(--sans);
   overflow: hidden;
 }
 
@@ -84,7 +88,12 @@ body {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  /* The paper's name: the one piece of type in the toolbar that is content
+     rather than a control, so it is a step larger and set a little tighter. */
+  font-size: 14.5px;
   font-weight: 600;
+  letter-spacing: -0.01em;
+  color: var(--text);
 }
 
 #toolbar-controls {

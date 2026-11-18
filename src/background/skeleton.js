@@ -16,8 +16,8 @@ import { MIN_OUTLINE, MIN_PDF } from "../viewer/pane-resize.js";
 // Copied from theme.css, which is the source of truth; tools/test/capture.test.mjs
 // fails if these drift from it.
 export const TOKENS = {
-  dark: { bg: "#121a17", bgRaised: "#18221e", bgSunken: "#0c120f", border: "#26332d", text: "#e4e6df", textDim: "#8d9a92", accent: "#d4a94f" },
-  light: { bg: "#f3f4f0", bgRaised: "#ffffff", bgSunken: "#e2e5de", border: "#d2d7cd", text: "#1a211d", textDim: "#59655e", accent: "#8a6416" },
+  dark: { bg: "#0f1624", bgRaised: "#152036", bgSunken: "#0a101b", border: "#233251", text: "#e4ebf7", textDim: "#8e9cb8", accent: "#5b9bff" },
+  light: { bg: "#eef3fa", bgRaised: "#ffffff", bgSunken: "#dce5f2", border: "#c8d4e6", text: "#13203a", textDim: "#4e5e7b", accent: "#1f5fd6" },
 };
 
 const MB = 1024 * 1024;
@@ -52,7 +52,7 @@ export function skeletonHead({ name, theme = "dark", outlineWidth = 360, total =
 <style>
 :root{color-scheme:${theme === "light" ? "light" : "dark"}}
 html,body{height:100%;margin:0}
-body{display:flex;flex-direction:column;background:${t.bg};color:${t.text};font:13px/1.5 system-ui,-apple-system,"Segoe UI",sans-serif;overflow:hidden}
+body{display:flex;flex-direction:column;background:${t.bg};color:${t.text};font:13px/1.5 Inter,"SF Pro Text",-apple-system,BlinkMacSystemFont,"Helvetica Neue","Segoe UI",Roboto,Arial,sans-serif;overflow:hidden}
 #toolbar{display:flex;align-items:center;height:40px;flex:0 0 40px;padding:0 12px;background:${t.bgRaised};border-bottom:1px solid ${t.border}}
 #title{flex:1 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:600}
 #panes{display:flex;flex:1 1 auto;min-height:0}
