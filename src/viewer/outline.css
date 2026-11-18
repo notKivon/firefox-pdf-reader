@@ -17,8 +17,7 @@
 
 .confirm-heading {
   margin: 0;
-  font-family: var(--serif);
-  font-size: 16px;
+  font-size: 14px;
   font-weight: 600;
   color: var(--text);
 }
@@ -177,10 +176,9 @@
 
 .outline-tldr-text {
   margin: 0;
-  font-family: var(--serif);
-  font-size: 15.5px;
-  font-style: italic;
-  line-height: 1.5;
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 1.55;
   color: var(--text);
 }
 
@@ -224,9 +222,8 @@
   gap: 7px;
   width: 100%;
   color: var(--text);
-  font-family: var(--serif);
-  font-size: 14.5px;
-  line-height: 1.35;
+  font-size: 13.5px;
+  line-height: 1.4;
   font-weight: 600;
   text-align: left;
   cursor: pointer;
@@ -279,9 +276,8 @@
   margin: 0 0 0 -6px;
   padding: 3px 6px;
   border-radius: 5px;
-  font-family: var(--serif);
-  font-size: 14px;
-  line-height: 1.5;
+  font-size: 13.5px;
+  line-height: 1.55;
   color: var(--text);
   text-align: left;
   cursor: pointer;
@@ -313,7 +309,6 @@
 .outline-section-empty,
 .outline-section-pending {
   margin: 6px 0 0;
-  font-family: var(--serif);
   color: var(--text-dim);
   font-style: italic;
 }

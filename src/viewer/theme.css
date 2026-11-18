@@ -20,11 +20,6 @@
   --page-edge: rgba(0, 0, 0, 0.65);
   --page-gap: 18px;
 
-  /* The outline restates the paper, so it is set like notes on it: a book
-     serif, with the math faces behind it for symbols the serif lacks. */
-  --serif: "Iowan Old Style", Charter, "Bitstream Charter", "Sitka Text", Georgia, "STIX Two Math",
-    "Apple Symbols", "Arial Unicode MS", serif;
-
   --toolbar-height: 42px;
   --outline-width: 360px;
 }
@@ -89,10 +84,7 @@ body {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-family: var(--serif);
-  font-size: 14px;
   font-weight: 600;
-  letter-spacing: 0.005em;
 }
 
 #toolbar-controls {
