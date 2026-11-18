@@ -8,6 +8,7 @@ const out = resolve(root, "dist");
 // Files copied verbatim into dist/, as [source, destination-relative-to-dist].
 // Extension pages are referenced flat from the manifest, so they land at the root.
 const pdfjs = (path) => `node_modules/pdfjs-dist/${path}`;
+const inter = (path) => `node_modules/@fontsource-variable/inter/${path}`;
 
 const STATIC = [
   ["manifest.json", "manifest.json"],
@@ -16,6 +17,13 @@ const STATIC = [
   ["src/viewer/controls.css", "controls.css"],
   ["src/viewer/debug.css", "debug.css"],
   ["src/viewer/outline.css", "outline.css"],
+  ["src/viewer/fonts.css", "fonts.css"],
+  // Inter, bundled so no page ever fetches a font. Only the subsets fonts.css
+  // declares, and the OFL licence that redistribution requires.
+  [inter("files/inter-latin-wght-normal.woff2"), "fonts/inter-latin-wght-normal.woff2"],
+  [inter("files/inter-latin-ext-wght-normal.woff2"), "fonts/inter-latin-ext-wght-normal.woff2"],
+  [inter("files/inter-greek-wght-normal.woff2"), "fonts/inter-greek-wght-normal.woff2"],
+  [inter("LICENSE"), "fonts/LICENSE-Inter.txt"],
   ["src/settings/settings.html", "settings.html"],
   ["src/settings/settings.css", "settings.css"],
   // pdf.js ships its viewer CSS and the images that CSS references side by

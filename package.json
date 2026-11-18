@@ -13,6 +13,7 @@
     "probe": "node tools/live-probe.mjs"
   },
   "dependencies": {
+    "@fontsource-variable/inter": "^5.3.0",
     "pdfjs-dist": "^6.3.289"
   },
   "devDependencies": {
