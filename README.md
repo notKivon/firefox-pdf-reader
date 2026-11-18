@@ -103,6 +103,9 @@ Then, once per profile:
    it into settings under **Claude bridge token**. The token is kept in
    `~/.config/scholar-reader/bridge-token`. Opus 5.5 is the default; Sonnet 5.5
    and Haiku 5.5 are in the provider list, in settings or the pane's switch.
+   The **Chat** tab, beside **Outline**, uses the same bridge. A bridge started
+   before the chat tab existed doesn't understand chat requests: stop it with
+   Ctrl+C and run `npm run bridge` again.
 7. **Only for the local model:** Ollama checks the request's `Origin`. With the
    macOS desktop app, run `launchctl setenv OLLAMA_ORIGINS "moz-extension://*"` and
    restart Ollama. This does not survive a reboot. If Ollama was started from a

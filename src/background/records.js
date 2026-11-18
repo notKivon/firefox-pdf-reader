@@ -8,7 +8,7 @@
 // click. With every read and write here, there is one partition: the
 // background's.
 import { getProvider } from "../model/providers.js";
-import { cacheKey } from "../store/cache-key.js";
+import { cacheKey, chatKey } from "../store/cache-key.js";
 import { allConsents, grantConsent, isConsented, revokeAll, revokeDocument } from "../store/consent.js";
 import { getDoc, readingPosition, recordOpen, saveReadingPosition } from "../store/docs.js";
 
@@ -26,14 +26,16 @@ function requireHash(hash) {
  * derived one, so a card rendered under an older prompt version cannot grant
  * the current one.
  */
-async function grant({ hash, providerId, cacheKey: shown }) {
+async function grant({ hash, providerId, cacheKey: shown, kind = "outline" }) {
   requireHash(hash);
   const provider = getProvider(providerId);
-  const key = cacheKey(hash, providerId);
+  if (kind !== "outline" && kind !== "chat") throw new Error("not a kind of send.");
+  if (kind === "chat" && !provider.bridge) throw new Error(`${provider.label} does not chat.`);
+  const key = kind === "chat" ? chatKey(hash, providerId) : cacheKey(hash, providerId);
   if (shown !== key) {
     throw new Error("the approval was for a different send than the one this version would make. Reload the page and approve again.");
   }
-  await grantConsent({ cacheKey: key, hash, providerId, model: provider.model, destination: provider.destination });
+  await grantConsent({ cacheKey: key, hash, providerId, model: provider.model, destination: provider.destination, kind });
   // Read back through the same check the gate uses, so a grant that did not
   // stick is reported here, as a failure, rather than as a refusal later.
   if (!(await isConsented(key))) throw new Error("the approval was written but could not be read back.");

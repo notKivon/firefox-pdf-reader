@@ -1,5 +1,7 @@
-// One headless Claude Code run: the system prompt and the paper in, the
-// structured outline out, streamed as the model writes it.
+// One headless Claude Code run, streamed as the model writes it. Two modes:
+// with a JSON schema, the structured outline (the StructuredOutput tool's
+// input); without one, plain text, for the chat tab.
+
 //
 // The run is stripped to the one thing it is for. No tools but the
 // StructuredOutput one --json-schema adds, no MCP servers, no settings files, no
@@ -48,12 +50,12 @@ const emptyDir = mkdtempSync(join(tmpdir(), "scholar-bridge-"));
  * @param {string} args.model one of MODELS
  * @param {string} args.system
  * @param {string} args.user
- * @param {object} args.schema JSON schema for the structured output
+ * @param {object|null} args.schema JSON schema for structured output; null for text
  * @param {AbortSignal} args.signal aborts the child
- * @param {(text: string) => void} args.onDelta a slice of the structured JSON
+ * @param {(text: string) => void} args.onDelta a slice of the JSON, or of the text
  * @param {() => void} args.onReset the model started its answer over
  * @param {() => void} args.onAlive any sign the run is still working
- * @returns {Promise<{structured: object, usage: object}>}
+ * @returns {Promise<{structured?: object, text?: string, usage: object}>}
  */
 export function runClaude({ model, system, user, schema, signal, onDelta, onReset, onAlive }) {
   const args = [
@@ -62,7 +64,7 @@ export function runClaude({ model, system, user, schema, signal, onDelta, onRese
     "--output-format", "stream-json",
     "--verbose",
     "--include-partial-messages",
-    "--json-schema", JSON.stringify(schema),
+    ...(schema ? ["--json-schema", JSON.stringify(schema)] : []),
     "--system-prompt", system,
     "--tools", "",
     "--strict-mcp-config",
@@ -81,7 +83,7 @@ export function runClaude({ model, system, user, schema, signal, onDelta, onRese
     stderr = (stderr + chunk).slice(-2000);
   });
 
-  const state = { outputIndex: null, outputs: 0, rejectedUntil: null, result: null };
+  const state = { text: !schema, outputIndex: null, outputs: 0, rejectedUntil: null, result: null };
   let buffer = "";
   child.stdout.on("data", (chunk) => {
     buffer += chunk;
@@ -125,23 +127,22 @@ function handleLine(line, state, { onDelta, onReset, onAlive }) {
     state.result = msg;
   } else if (msg.type === "stream_event") {
     const event = msg.event ?? {};
-    if (event.type === "content_block_start" && event.content_block?.name === "StructuredOutput") {
+    const wanted = state.text ? event.content_block?.type === "text" : event.content_block?.name === "StructuredOutput";
+    if (event.type === "content_block_start" && wanted) {
       state.outputIndex = event.index;
-      if (state.outputs++ > 0) onReset();
-    } else if (
-      event.type === "content_block_delta" &&
-      event.index === state.outputIndex &&
-      event.delta?.type === "input_json_delta" &&
-      event.delta.partial_json
-    ) {
-      onDelta(event.delta.partial_json);
+      // A second structured answer replaces the first; a second text block
+      // (after a think, say) continues the reply.
+      if (state.outputs++ > 0 && !state.text) onReset();
+    } else if (event.type === "content_block_delta" && event.index === state.outputIndex) {
+      const piece = state.text ? event.delta?.text : event.delta?.partial_json;
+      if (typeof piece === "string" && piece) onDelta(piece);
     } else if (event.type === "content_block_stop" && event.index === state.outputIndex) {
       state.outputIndex = null;
     }
   }
 }
 
-function finish({ result, rejectedUntil }, code, stderr) {
+function finish({ result, rejectedUntil, text }, code, stderr) {
   const retryAfterSec = rejectedUntil ? Math.max(1, Math.round(rejectedUntil - Date.now() / 1000)) : undefined;
   if (rejectedUntil || result?.api_error_status === 429) {
     const message = result?.result || "Claude Code usage limit reached.";
@@ -154,14 +155,17 @@ function finish({ result, rejectedUntil }, code, stderr) {
     const status = result.api_error_status === 401 || result.api_error_status === 403 ? 401 : 502;
     throw new BridgeError(String(result.result || "Claude Code reported an error."), { status });
   }
-  if (!result.structured_output || typeof result.structured_output !== "object") {
+  if (!text && (!result.structured_output || typeof result.structured_output !== "object")) {
     throw new BridgeError("Claude Code finished without a structured answer.");
+  }
+  if (text && typeof result.result !== "string") {
+    throw new BridgeError("Claude Code finished without a reply.");
   }
   const u = result.usage ?? {};
   const prompt = (u.input_tokens ?? 0) + (u.cache_creation_input_tokens ?? 0) + (u.cache_read_input_tokens ?? 0);
   const completion = u.output_tokens ?? 0;
   return {
-    structured: result.structured_output,
+    ...(text ? { text: result.result } : { structured: result.structured_output }),
     usage: { prompt_tokens: prompt, completion_tokens: completion, total_tokens: prompt + completion },
   };
 }

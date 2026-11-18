@@ -17,6 +17,7 @@ const STATIC = [
   ["src/viewer/controls.css", "controls.css"],
   ["src/viewer/debug.css", "debug.css"],
   ["src/viewer/outline.css", "outline.css"],
+  ["src/viewer/chat.css", "chat.css"],
   ["src/viewer/fonts.css", "fonts.css"],
   // Inter, bundled so no page ever fetches a font. Only the subsets fonts.css
   // declares, and the OFL licence that redistribution requires.

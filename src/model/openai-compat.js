@@ -21,13 +21,40 @@ import { decodeJson, networkError, originRefusedError } from "./wire.js";
  * @returns {Promise<{data: object, usage: object|null, text: string}>}
  */
 export async function chatJson({ providerId, provider, apiKey, messages, schema, onPartial, onAlive, signal }) {
+  const response = await post({
+    providerId,
+    provider,
+    apiKey,
+    signal,
+    extra: { response_format: { type: "json_schema", json_schema: { name: "outline", strict: true, schema } } },
+    messages,
+  });
+  const { content, usage } = await readStream(response, { onPartial, onAlive, providerId, provider });
+  return { data: decodeJson(content, providerId), usage, text: content };
+}
+
+/**
+ * The chat tab's turn: the same POST with no schema, answered as plain text.
+ * `onText` gets the whole reply so far on every delta.
+ *
+ * @param {object} args as chatJson, minus `schema` and `onPartial`
+ * @param {(text: string) => void} [args.onText]
+ * @returns {Promise<{text: string, usage: object|null}>}
+ */
+export async function chatText({ providerId, provider, apiKey, messages, onText, onAlive, signal }) {
+  const response = await post({ providerId, provider, apiKey, signal, extra: {}, messages });
+  const { content, usage } = await readStream(response, { onText, onAlive, providerId, provider });
+  if (!content.trim()) {
+    throw new ProviderError("The model returned an empty reply.", { kind: "malformed", providerId });
+  }
+  return { text: content, usage };
+}
+
+async function post({ providerId, provider, apiKey, signal, extra, messages }) {
   const body = {
     model: provider.model,
     messages,
-    response_format: {
-      type: "json_schema",
-      json_schema: { name: "outline", strict: true, schema },
-    },
+    ...extra,
     stream: true,
     stream_options: { include_usage: true },
     ...(provider.params ?? {}),
@@ -59,9 +86,7 @@ export async function chatJson({ providerId, provider, apiKey, messages, schema,
   }
 
   if (!response.ok) throw await httpError(response, providerId, provider);
-
-  const { content, usage } = await readStream(response, { onPartial, onAlive, providerId, provider });
-  return { data: decodeJson(content, providerId), usage, text: content };
+  return response;
 }
 
 // SSE: `data: {json}` lines, terminated by `data: [DONE]`. Deltas accumulate
@@ -70,7 +95,7 @@ export async function chatJson({ providerId, provider, apiKey, messages, schema,
 // Two extensions, both sent only by the Claude bridge (tools/bridge/server.mjs):
 // `final_content` replaces what was streamed when the model started its answer
 // over, and `error` is a failure after the 200 was already committed.
-async function readStream(response, { onPartial, onAlive, providerId, provider }) {
+async function readStream(response, { onPartial, onText, onAlive, providerId, provider }) {
   const reader = response.body.getReader();
   const decoder = new TextDecoder();
   let buffer = "";
@@ -102,11 +127,15 @@ async function readStream(response, { onPartial, onAlive, providerId, provider }
           const { status = 502, message = "", retry_after: retryAfter } = chunk.error;
           throw toError(status, String(message).slice(0, 300), retryAfter, providerId, provider);
         }
-        if (typeof chunk.final_content === "string") content = chunk.final_content;
+        if (typeof chunk.final_content === "string") {
+          content = chunk.final_content;
+          onText?.(content);
+        }
         if (chunk.usage) usage = chunk.usage;
         const delta = chunk.choices?.[0]?.delta?.content;
         if (typeof delta === "string" && delta) {
           content += delta;
+          onText?.(content);
           if (onPartial) {
             const sections = completeSections(content);
             if (sections.length > emitted) {

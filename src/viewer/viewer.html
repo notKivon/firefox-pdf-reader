@@ -10,6 +10,7 @@
     <link rel="stylesheet" href="controls.css" />
     <link rel="stylesheet" href="debug.css" />
     <link rel="stylesheet" href="outline.css" />
+    <link rel="stylesheet" href="chat.css" />
   </head>
   <body>
     <header id="toolbar">
@@ -65,9 +66,11 @@
       </main>
       <div id="pane-resizer" role="separator" aria-orientation="vertical" aria-label="Resize outline pane" title="Drag to resize · double-click to reset" tabindex="0"></div>
       <aside id="outline-pane">
+        <nav id="pane-tabs" aria-label="Pane"></nav>
         <p id="pane-note" class="pane-note" hidden></p>
         <div id="outline-root"></div>
         <div id="debug-pane"></div>
+        <div id="chat-root" hidden></div>
       </aside>
     </div>
 

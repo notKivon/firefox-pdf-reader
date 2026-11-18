@@ -39,7 +39,7 @@ export function groupGrants(consents, docs) {
     }
     group.grants.push({
       key: grant.key,
-      label: PROVIDERS[grant.providerId]?.label ?? grant.providerId,
+      label: `${PROVIDERS[grant.providerId]?.label ?? grant.providerId}${grant.kind === "chat" ? " — chat" : ""}`,
       model: grant.model,
       destination: grant.destination,
       when: formatWhen(grant.grantedAt),

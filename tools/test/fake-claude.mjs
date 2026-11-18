@@ -32,6 +32,17 @@ process.stdin.on("end", () => {
     return;
   }
 
+  // No --json-schema: a chat turn, answered as text blocks.
+  if (!process.argv.includes("--json-schema")) {
+    const reply = process.env.FAKE_CLAUDE_TEXT ?? "A plain reply.";
+    event({ type: "content_block_start", index: 0, content_block: { type: "text", text: "" } });
+    event({ type: "content_block_delta", index: 0, delta: { type: "text_delta", text: reply.slice(0, 5) } });
+    event({ type: "content_block_delta", index: 0, delta: { type: "text_delta", text: reply.slice(5) } });
+    event({ type: "content_block_stop", index: 0 });
+    say({ type: "result", is_error: false, result: reply, usage: { input_tokens: 5, output_tokens: 7 } });
+    return;
+  }
+
   const block = (index, text) => {
     event({ type: "content_block_start", index, content_block: { type: "tool_use", name: "StructuredOutput", input: {} } });
     const half = Math.floor(text.length / 2);

@@ -52,13 +52,25 @@ function parseRequest(body) {
   const messages = Array.isArray(parsed.messages) ? parsed.messages : [];
   const text = (role) =>
     messages.filter((m) => m?.role === role && typeof m.content === "string").map((m) => m.content).join("\n\n");
-  const schema = parsed.response_format?.json_schema?.schema;
-  if (!schema || typeof schema !== "object") {
-    throw new BridgeError("A JSON schema is required (response_format.json_schema.schema).", { status: 400 });
+  // With a schema: the outline. Without: a chat turn, answered as plain text.
+  const schema = parsed.response_format?.json_schema?.schema ?? null;
+  if (schema !== null && typeof schema !== "object") {
+    throw new BridgeError("response_format.json_schema.schema is not a schema.", { status: 400 });
   }
-  const user = text("user");
-  if (!user) throw new BridgeError("No user message.", { status: 400 });
-  return { model: parsed.model, system: text("system"), user, schema };
+  const turns = messages.filter((m) => (m?.role === "user" || m?.role === "assistant") && typeof m.content === "string");
+  if (turns.at(-1)?.role !== "user") throw new BridgeError("No user message.", { status: 400 });
+  return { model: parsed.model, system: text("system"), user: transcript(turns), schema };
+}
+
+// `claude -p` takes one prompt, so earlier turns travel inside it. A single
+// user message — every outline request — goes as it is.
+function transcript(turns) {
+  if (turns.length === 1) return turns[0].content;
+  const earlier = turns
+    .slice(0, -1)
+    .map((m) => `${m.role === "user" ? "Reader" : "You"}: ${m.content}`)
+    .join("\n\n");
+  return `The conversation so far:\n\n${earlier}\n\nThe reader's new message:\n\n${turns.at(-1).content}`;
 }
 
 async function serve(req, res, request, log) {
@@ -83,7 +95,7 @@ async function serve(req, res, request, log) {
 
   const started = Date.now();
   try {
-    const { structured, usage } = await runClaude({
+    const { structured, text, usage } = await runClaude({
       ...request,
       signal: controller.signal,
       onDelta: (text) => {
@@ -99,8 +111,11 @@ async function serve(req, res, request, log) {
       },
     });
     commit();
-    const final = JSON.stringify(structured);
-    if (!sameJson(streamed, structured)) send({ final_content: final, choices: [] });
+    if (text !== undefined) {
+      if (text !== streamed) send({ final_content: text, choices: [] });
+    } else if (!sameJson(streamed, structured)) {
+      send({ final_content: JSON.stringify(structured), choices: [] });
+    }
     send({ choices: [], usage });
     res.write("data: [DONE]\n\n");
     log(`[bridge] ${request.model}: done in ${Math.round((Date.now() - started) / 1000)} s, ` +

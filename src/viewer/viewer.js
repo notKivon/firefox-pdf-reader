@@ -12,6 +12,8 @@ import { initActions } from "./actions.js";
 import { initDownload } from "./download.js";
 import { createDebugPane } from "./debug-pane.js";
 import { createOutlinePane } from "./outline-pane.js";
+import { createChatPane } from "./chat-pane.js";
+import { initPaneTabs } from "./pane-tabs.js";
 import { trackReadingPosition } from "./reading-position.js";
 import { trackCurrentSection } from "./scroll-spy.js";
 import { captureToken, fromFile, fromUrl, nameOf, nextPickedFile, requestedUrl } from "./source.js";
@@ -29,6 +31,8 @@ const els = {
   note: $("pane-note"),
   outline: $("outline-root"),
   debug: $("debug-pane"),
+  chat: $("chat-root"),
+  tabs: $("pane-tabs"),
   title: $("doc-title"),
   pageInput: $("page-input"),
   pageTotal: $("page-total"),
@@ -181,8 +185,17 @@ async function main() {
     onSections: (targets) => spy.setSections(targets),
     onReady: () => debugPane.collapse(),
   });
+  const chatPane = createChatPane({ root: els.chat, onJump: (target) => view.scrollToSection(target) });
+  initPaneTabs({
+    bar: els.tabs,
+    tabs: [
+      { id: "outline", label: "Outline", panels: [els.outline, els.debug] },
+      { id: "chat", label: "Chat", panels: [els.chat] },
+    ],
+  }).catch((err) => console.warn("[scholar-reader] pane tabs", err));
   browser.runtime.onMessage.addListener((message) => {
     if (message?.type === "outline-progress") outlinePane.progress(message);
+    if (message?.type === "chat-progress") chatPane.progress(message);
   });
 
   // Started before the store round-trip rather than after it: extraction is the
@@ -209,8 +222,13 @@ async function main() {
   extraction
     .then((result) => {
       // No sections means no card and no spinner: the pane says why instead.
-      if (result) outlinePane.start({ hash, meta, sections: result.sections, scanned: result.scanned });
-      else outlinePane.fail("The text layer could not be read, so there is nothing to outline.");
+      if (result) {
+        outlinePane.start({ hash, meta, sections: result.sections, scanned: result.scanned });
+        chatPane.start({ hash, meta, sections: result.sections, scanned: result.scanned });
+      } else {
+        outlinePane.fail("The text layer could not be read, so there is nothing to outline.");
+        chatPane.fail("The text layer could not be read, so there is nothing to chat about.");
+      }
     })
     .catch((err) => {
       console.error("[scholar-reader] extraction pane failed", err);

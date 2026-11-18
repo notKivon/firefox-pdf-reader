@@ -13,6 +13,7 @@ import { isConsented } from "../store/consent.js";
 import { claim } from "../store/inbox.js";
 import { isCacheable, saveOutline } from "../store/outlines.js";
 import { status as quotaStatus } from "../store/quota.js";
+import { chatHandlers } from "./chat.js";
 import { plan } from "./plan.js";
 import { recordHandlers } from "./records.js";
 import { createWatchdog } from "./watchdog.js";
@@ -118,6 +119,8 @@ function handlers({ bypass }) {
     // no page reads or writes them itself. The consent gate stays below, in
     // runOutline, which re-reads the store whatever a page has said.
     ...recordHandlers(),
+    // The chat tab: background/chat.js, with its own consent gate.
+    ...chatHandlers(),
     plan: (message) => plan(message),
     outline: (message, sender) => runOutline(message, sender.tab?.id),
     // Read-only: what today's counters stand at, for the settings page.

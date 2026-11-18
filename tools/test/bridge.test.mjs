@@ -129,6 +129,32 @@ await test("Opus and Sonnet get guidelines; Haiku and the rest keep the strict r
   }
 });
 
+await test("a chat turn runs without a schema and carries the earlier turns", async () => {
+  const { chatText } = await import("../../src/model/openai-compat.js");
+  process.env.FAKE_CLAUDE_TEXT = "Adam corrects bias [§ 3 Bias].";
+  const seen = [];
+  const result = await chatText({
+    providerId: "claude-opus",
+    provider,
+    apiKey: token,
+    messages: [
+      { role: "system", content: "THE PAPER" },
+      { role: "user", content: "First?" },
+      { role: "assistant", content: "First answer." },
+      { role: "user", content: "Second?" },
+    ],
+    onText: (text) => seen.push(text),
+  });
+  assert.equal(result.text, "Adam corrects bias [§ 3 Bias].");
+  assert.equal(seen.at(-1), result.text);
+  assert.ok(seen.length >= 2, "streamed, not delivered at the end");
+  const { argv, stdin } = JSON.parse(readFileSync(argvFile, "utf8"));
+  assert.ok(!argv.includes("--json-schema"));
+  assert.equal(argv[argv.indexOf("--system-prompt") + 1], "THE PAPER");
+  assert.match(stdin, /Reader: First\?\n\nYou: First answer\./);
+  assert.match(stdin, /The reader's new message:\n\nSecond\?$/);
+});
+
 server.close();
 globalThis.fetch = realFetch;
 console.log(results.join("\n"));

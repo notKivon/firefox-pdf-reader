@@ -222,6 +222,15 @@ The escape hatch above, taken — by Ollama rather than by Gemini, and for a dif
 - Headers are held up to 8 s so early failures keep their status: usage limit → 429 with `Retry-After` from the CLI's `rate_limit_event`; CLI error → 502 with its message; bad login → 401. After the 200 is committed, a failure is a `data: {"error": {status, message, retry_after}}` chunk, and a restarted answer is replaced by a `final_content` chunk. Every line, keep-alive comments included, pokes the stall watchdog through `onAlive`.
 - `node tools/bridge-probe.mjs [fixture] [provider]` runs one real outline through the running bridge and the real adapter (spends subscription usage).
 
+## Chat tab (step 22)
+- `model/chat-prompt.js`: `CHAT_PROMPT_VERSION`, `chatMessages(sections, meta, history, question)`, `splitCitations(text, sections)` (case- and space-insensitive title match; unmatched citations stay as text).
+- `model/openai-compat.js#chatText`: the same POST without `response_format`, streamed as text; `onText` gets the whole reply so far.
+- `background/chat.js`: `chat-plan`, `chat` (gate, then stream `chat-progress` to the tab, then `appendTurn`), `chat-history`, `chat-clear`. Watchdog as for outlines.
+- `store/chats.js`: `{hash, messages: [{role, content, providerId, model, at}], updatedAt}`, capped at 60 messages.
+- `viewer/pane-tabs.js` (Outline | Chat, remembered in `storage.local` as `paneTab`), `viewer/chat-pane.js` (states, composer, model picker, two-click Clear), `viewer/chat-render.js` (reply paragraphs and `- ` lists as DOM, citation links, the approval card), `viewer/chat.css`.
+- Bridge: no schema means text mode. Text blocks are streamed, `result.result` is final, and earlier turns go into the prompt as a transcript, because `claude -p` takes one prompt.
+- `node tools/chat-probe.mjs [fixture] [provider] [port]`: two real turns through a running bridge (spends subscription usage).
+
 ## store/db.js
 IndexedDB `scholar-reader`, version 1:
 - `docs` — key `hash`; `{ hash, title, authors, doi, arxivId, pageCount, urls[], lastOpened, lastPage, scrollTop }`

@@ -1,13 +1,14 @@
 // IndexedDB "scholar-reader": one shared connection, thin promise helpers.
 // Every store module (docs, outlines, quota) goes through here.
 const DB_NAME = "scholar-reader";
-const DB_VERSION = 3;
+const DB_VERSION = 4;
 
 export const DOCS = "docs";
 export const OUTLINES = "outlines";
 export const CONSENTS = "consents";
 export const QUOTA = "quota";
 export const INBOX = "inbox";
+export const CHATS = "chats";
 
 let connection = null;
 
@@ -38,6 +39,11 @@ function upgrade(db) {
     // Version 3: PDF bytes captured by the background, waiting for the viewer
     // tab they were captured for. Transient — see store/inbox.js.
     db.createObjectStore(INBOX, { keyPath: "token" });
+  }
+  if (!db.objectStoreNames.contains(CHATS)) {
+    // Version 4: one conversation per document, from the chat tab. Keyed by
+    // hash alone, so a paper's chat follows it across URLs and models.
+    db.createObjectStore(CHATS, { keyPath: "hash" });
   }
 }
 

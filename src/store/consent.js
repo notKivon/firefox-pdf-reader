@@ -27,13 +27,14 @@ export async function isConsented(key) {
  *
  * @param {{cacheKey: string, hash: string, providerId: string, model: string, destination: string}} plan
  */
-export async function grantConsent({ cacheKey, hash, providerId, model, destination }) {
+export async function grantConsent({ cacheKey, hash, providerId, model, destination, kind = "outline" }) {
   return put(CONSENTS, {
     key: cacheKey,
     hash,
     providerId,
     model,
     destination,
+    kind,
     grantedAt: Date.now(),
   });
 }
