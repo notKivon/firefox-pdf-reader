@@ -8,7 +8,8 @@
 // the sections are given as the list to cite from.
 import { pdfPart } from "./pdf.js";
 
-export const CHAT_PROMPT_VERSION = 2;
+// 3 (2026-11-19): mathematics as LaTeX, which the viewer typesets (math.js).
+export const CHAT_PROMPT_VERSION = 3;
 
 // How the model names a section it relied on. The viewer turns a citation into
 // a jump link only when the title matches a section extracted on this machine,
@@ -22,7 +23,7 @@ Use your judgement on length: a direct question deserves a direct answer. Ground
 
 When you rely on a particular section, cite it inline as [§ Title], using that section's title exactly as given below — for example [§ 3 Method]. The reader's screen turns those into links to the section.
 
-Write plain text: short paragraphs, and "- " for a list when one helps. No headings, tables or other markdown.`;
+Write plain text: short paragraphs, and "- " for a list when one helps. No headings, tables or other markdown. Write any mathematics as LaTeX: $...$ inline, $$...$$ for an equation on its own. Do not wrap plain words or numbers in $. The reader's screen typesets it.`;
 
 /**
  * @param {{title: string, text: string}[]} sections the extraction, References

@@ -9,7 +9,8 @@
 // (paper-prompt.js). Outlines built on the old sections are not served.
 // 3 (2026-11-19): the PDF itself is sent to the providers that take one, and
 // headings are copied as printed.
-export const PROMPT_VERSION = 3;
+// 4 (2026-11-19): mathematics as LaTeX, typeset by the viewer (math.js).
+export const PROMPT_VERSION = 4;
 
 export const MAX_BULLET_WORDS = 20;
 
@@ -19,6 +20,7 @@ const RULES = [
   "Be extractive: restate what the section says. Never infer, evaluate, speculate, or add anything the text does not state.",
   "Where the section reports numbers, keep them verbatim — values, units, percentages, dataset sizes, model names.",
   "If the section reports results or measurements, at least one bullet must carry the specific figures it reports, not a description of them.",
+  "Write any mathematics as LaTeX: $...$ inline, $$...$$ for an equation on its own. Do not wrap plain words or numbers in $.",
   "Write nothing about the reference list, acknowledgements or funding.",
   "Echo the value of each section's Title field back exactly as given, character for character, including its numbering. Never answer with any other text as the title.",
 ].map((rule) => `- ${rule}`).join("\n");

@@ -35,6 +35,8 @@ For each section, in order:
 
 ${STYLE[style === "guidelines" ? "guidelines" : "strict"]}
 
+Write any mathematics as LaTeX: $...$ inline, $$...$$ for an equation on its own. Do not wrap plain words or numbers in $.
+
 Write nothing about the reference list, acknowledgements or funding. Answer with JSON only, matching the supplied schema.`;
 
 /**

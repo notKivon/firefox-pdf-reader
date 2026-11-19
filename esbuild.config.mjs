@@ -9,6 +9,7 @@ const out = resolve(root, "dist");
 // Extension pages are referenced flat from the manifest, so they land at the root.
 const pdfjs = (path) => `node_modules/pdfjs-dist/${path}`;
 const inter = (path) => `node_modules/@fontsource-variable/inter/${path}`;
+const katex = (path) => `node_modules/katex/${path}`;
 
 const STATIC = [
   ["manifest.json", "manifest.json"],
@@ -25,6 +26,12 @@ const STATIC = [
   [inter("files/inter-latin-ext-wght-normal.woff2"), "fonts/inter-latin-ext-wght-normal.woff2"],
   [inter("files/inter-greek-wght-normal.woff2"), "fonts/inter-greek-wght-normal.woff2"],
   [inter("LICENSE"), "fonts/LICENSE-Inter.txt"],
+  // KaTeX, for equations in replies and bullets (viewer/math.js). Its CSS
+  // reaches its fonts as url(fonts/KaTeX_…), so both land beside the page;
+  // the font files share dist/fonts with Inter. Nothing is fetched remotely.
+  [katex("dist/katex.min.css"), "katex.css"],
+  [katex("dist/fonts"), "fonts"],
+  [katex("LICENSE"), "fonts/LICENSE-KaTeX.txt"],
   ["src/settings/settings.html", "settings.html"],
   ["src/settings/settings.css", "settings.css"],
   // pdf.js ships its viewer CSS and the images that CSS references side by

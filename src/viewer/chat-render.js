@@ -3,6 +3,7 @@
 // never markup.
 import { splitCitations } from "../model/chat-prompt.js";
 import { el } from "./el.js";
+import { repairTex, withMath } from "./math.js";
 
 /**
  * A reply as paragraphs and "- " lists, with each [§ Title] that matches an
@@ -38,7 +39,7 @@ export function replyBody(text, sections, onJump) {
 function inline(node, text, sections, onJump) {
   for (const part of splitCitations(text, sections)) {
     if (part.text !== undefined) {
-      node.append(el("span", null, part.text));
+      node.append(...withMath(repairTex(part.text), (run) => el("span", null, run)));
       continue;
     }
     const { page, y } = sections[part.index];

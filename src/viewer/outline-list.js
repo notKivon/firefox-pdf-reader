@@ -7,6 +7,14 @@
 import { el } from "./el.js";
 import { normalizeModelText, normalizeText } from "../extract/normalize.js";
 import { locateBullet } from "./locate.js";
+import { repairTex, withMath } from "./math.js";
+
+// Model text with its equations typeset (math.js); the plain runs between them
+// still get the old clean-up, which drops stray LaTeX wrappers outside $…$.
+const rich = (node, text) => {
+  node.append(...withMath(repairTex(text), (run) => el("span", null, normalizeModelText(run))));
+  return node;
+};
 
 const targetOf = (section) => ({ page: section.page, y: section.y });
 
@@ -47,9 +55,12 @@ function bulletList(section, onJump, lines) {
   const list = el("ul", "outline-bullets");
   for (const bullet of section.bullets) {
     const item = el("li", "outline-bullet");
-    // Normalised here as well as at extraction: this text is the model's, and a
-    // model both echoes the paper's notation and writes LaTeX of its own.
-    const go = el("div", "outline-bullet-go", normalizeModelText(bullet));
+    // The model's text, with any LaTeX it wrote typeset rather than stripped
+    // (2026-11-19); plain runs are normalised as before.
+    // One inner span holds it all: the row is a flex box (the dash is its first
+    // item), and text and equations as separate items would split into columns.
+    const go = el("div", "outline-bullet-go");
+    go.append(rich(el("span", "outline-bullet-text"), bullet));
     // A bullet goes to the lines it restates when those can be found in the
     // paper, and to its heading when they cannot. The location is computed
     // here from the section's own text — never supplied by the model. See
@@ -109,7 +120,7 @@ export function outlineList(result, { onJump, partial = false, linesFor } = {}) 
 
   if (result.tldr) {
     const box = el("div", "outline-tldr");
-    box.append(el("h2", "outline-tldr-label", "In short"), el("p", "outline-tldr-text", normalizeModelText(result.tldr)));
+    box.append(el("h2", "outline-tldr-label", "In short"), rich(el("p", "outline-tldr-text"), result.tldr));
     node.append(box);
   }
 

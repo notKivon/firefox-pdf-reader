@@ -249,6 +249,12 @@ The escape hatch above, taken — by Ollama rather than by Gemini, and for a dif
 - `extract/anchor.js` placement tiers, strictest first over the remaining paper: exact start (≤ 3 joined lines), numbering-free start (a one-word heading must be the whole line), suffix of a single line (≥ 3 words). Unplaced sections: kept, `unplaced: true`, target of the previous placed section (or the paper's first line), no lines; > 50% unplaced is malformed (`model-sections.js`) and gets no line placement in the viewer.
 - `PROMPT_VERSION` 3, `CHAT_PROMPT_VERSION` 2.
 
+## Typeset mathematics (step 26)
+- `katex@0.16.22` (pinned) bundled into `viewer.js`; `dist/katex.css` and its fonts beside Inter's in `dist/fonts/`, with its MIT licence.
+- `viewer/math.js`: `mathParts` (`$$…$$`, `\[…\]`, `\(…\)`, `$…$` with the Markdown rule — no space just inside, no digit after the closing dollar; `\$` is a dollar), `mathNode` (KaTeX `throwOnError`, `trust: false`, `strict: "ignore"`, `maxSize` 20, `maxExpand` 500; failure → `.math-raw` with the source text), `withMath`, `repairTex` (backspace/form feed/tab before a letter back to `\b`/`\f`/`\t`).
+- Used by `outline-list.js` (bullets — inside one `.outline-bullet-text` span, the row being a flex box — and the TL;DR) and `chat-render.js` (reply text between citations).
+- `PROMPT_VERSION` 4, `CHAT_PROMPT_VERSION` 3.
+
 ## store/db.js
 IndexedDB `scholar-reader`, version 1:
 - `docs` — key `hash`; `{ hash, title, authors, doi, arxivId, pageCount, urls[], lastOpened, lastPage, scrollTop }`

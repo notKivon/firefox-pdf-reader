@@ -137,7 +137,7 @@ test("a click that ends a text selection does not jump the paper", () => {
   assert.equal(jumps.length, 1);
 });
 
-test("LaTeX the model wrote is unwrapped, and reported numbers survive", () => {
+test("math the model wrote is typeset; stray LaTeX outside it is still unwrapped", () => {
   const rendered = outlineList(
     {
       tldr: "The model $\\mathbf{z}$ is trained.",
@@ -146,8 +146,13 @@ test("LaTeX the model wrote is unwrapped, and reported numbers survive", () => {
     {},
   );
   const bullet = rendered.node.find("outline-bullet-go");
-  assert.equal(bullet.textContent, "Reaches 28.4 BLEU with x.");
-  assert.equal(rendered.node.find("outline-tldr-text").textContent, "The model z is trained.");
+  // In the browser KaTeX typesets the span; in this DOM-less test it falls
+  // back to the TeX as written, which is what a failed typeset shows.
+  const math = bullet.find("math-raw") ?? bullet.find("math");
+  assert.ok(math, "the $…$ span is a math node, not stripped text");
+  assert.match(math.textContent, /28\.4/, "the reported number survives");
+  assert.match(bullet.textContent, /BLEU with x\.$/, "\\mathbf outside $…$ is still unwrapped");
+  assert.ok(rendered.node.find("outline-tldr-text").find("math-raw") ?? rendered.node.find("outline-tldr-text").find("math"));
 });
 
 console.log(results.join("\n"));
