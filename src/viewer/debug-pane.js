@@ -6,10 +6,12 @@ import { UNRENDERABLE } from "../extract/normalize.js";
 const SCANNED_CHARS_PER_PAGE = 200;
 
 export function createDebugPane({ root, onJump }) {
-  // One collapsible block, open while the text layer is read and folded away by
-  // `collapse()` once an outline is on screen, so the outline leads the pane.
+  // One collapsible block, folded from the start (2026-11-19, at the user's
+  // request — it used to be open while the text layer was read and the outline
+  // generated). It is a diagnostic: one click opens it, and an extraction that
+  // fails says so in the outline pane, not only here.
   const panel = el("details", "debug-panel");
-  panel.open = true;
+  panel.open = false;
   const heading = el("summary", "debug-heading", "Extraction");
   const status = el("p", "debug-status", "Reading the text layer…");
   const stats = el("dl", "debug-stats");
