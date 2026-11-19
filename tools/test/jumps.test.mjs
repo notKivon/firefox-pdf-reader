@@ -49,7 +49,7 @@ test("a quote survives a hyphen split, a symbol the text layer lost, and a page 
 test("a quote that is not in the section places nothing", () => {
   assert.equal(locateQuote("the Hubble constant is seventy kilometres per second", lines), null);
   assert.equal(locateQuote("median error", lines), null, "too short to mean anything");
-  assert.equal(locateQuote("grid reuse particle snapshot median relative error voxelised", lines), null, "scattered words are not a quote");
+  assert.equal(locateQuote("tabulate snapshot median hundred smoothing distribution", lines), null, "words scattered across the section are not a quote");
 });
 
 test("a bullet goes to its quote's sentence before its own words or its heading", () => {
@@ -104,6 +104,26 @@ test("Back returns to the spot before the first of a run of jumps, zoom or not",
   for (const fn of keyListeners) fn({ key: "Escape", preventDefault() {} });
   assert.equal(button.hidden, true, "Escape lets the reader stay where they jumped");
   assert.equal(back.pending, false);
+});
+
+test("a quote survives ligature breaks, Greek written out, and a table inside the sentence", () => {
+  const broken = [
+    ["Results indicate that spill over is not signi", 1, 435, 203, 304],
+    ["ficant at the aggregate level, while the di", 1, 425, 203, 558],
+    ["fferential dependence of sectors is clear.", 1, 415, 203, 558],
+    ["For the DCC model the estimated coefficients", 2, 600, 38, 290],
+    ["θ1 and θ2 are found to be statistically significant for all sectors", 2, 590, 38, 290],
+    ["Table 1", 2, 580, 38, 80],
+    ["Descriptive statistics of return series", 2, 570, 38, 200],
+    ["OIL SEN AUTO EN FIN METAL POWER O G", 2, 560, 38, 290],
+    ["Mean 0.0021 0.0029 0.0017 0.0033 0.0012 0.0008 0.0019", 2, 550, 38, 290],
+    ["Std 0.041 0.032 0.039 0.044 0.051 0.047 0.038", 2, 540, 38, 290],
+    ["except EN and O & G sectors.", 2, 530, 38, 290],
+  ].map(([str, page, y, x, right]) => ({ str, page, y, height: 10, x, right }));
+  assert.equal(locateQuote("spill over is not significant at the aggregate level", broken)?.y, 435, "signi|ficant rejoined");
+  assert.equal(locateQuote("at the aggregate level, while the differential dependence of sectors is clear", broken)?.y, 425, "di|fferential rejoined");
+  const theta = locateQuote("the estimated coefficients theta1 and theta2 are found to be statistically significant for all sectors except EN and O & G", broken);
+  assert.equal(theta?.y, 600, "θ read as theta; the table inside the sentence does not lose it");
 });
 
 console.log(results.join("\n"));

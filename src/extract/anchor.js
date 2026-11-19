@@ -60,7 +60,13 @@ function joined(paper, i, k) {
   return norm(raw);
 }
 
-const starts = (candidate, heading) => candidate === heading || candidate.startsWith(`${heading} `);
+// A line that is the heading and then only a number is a table-of-contents
+// entry ("4.2 Galaxy survey priors 11"; dot leaders are already gone as
+// punctuation), not the heading itself. Without this, a paper with a contents
+// page placed every section on it — the contents list them all, in order,
+// before the first real one (a 42-page JCAP paper, 2026-11-19).
+const starts = (candidate, heading) =>
+  candidate === heading || (candidate.startsWith(`${heading} `) && !/^\d{1,4}$/.test(candidate.slice(heading.length + 1)));
 
 // Three ways a printed heading meets the text layer, tried in this order over
 // the whole remaining paper so the strictest match anywhere wins:
@@ -135,6 +141,16 @@ export function anchorSections(returned, paper) {
     const heading = norm(section?.heading);
     const hit = heading ? find(paper, from, heading) : null;
     const title = String(section?.title ?? section?.heading ?? "").trim() || String(section?.heading ?? "").trim();
+    // The first section is the one the paper opens with, so when its heading
+    // cannot be found — a title broken by a publisher's badge ("crossmark"
+    // between its two lines, an Elsevier paper, 2026-11-19) — it starts at the
+    // paper's first line. Order, not a guess; it keeps its lines and quotes.
+    if (!hit && sections.length === 0 && paper.length) {
+      previous = { page: paper[0].page, y: paper[0].y };
+      sections.push({ title, heading: String(section?.heading ?? "").trim(), page: previous.page, y: previous.y, start: 0, span: 0, unplaced: false });
+      from = 0;
+      continue;
+    }
     if (!hit) {
       unplaced++;
       missing ??= String(section?.heading ?? "");

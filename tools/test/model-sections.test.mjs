@@ -61,11 +61,12 @@ await test("headings are found in order, wrapped and run-in ones included", () =
 });
 
 await test("a heading not in the paper, or out of order, is missing — never guessed", () => {
-  assert.equal(anchorSections([{ heading: "II. METHODS" }], paper).missing, "II. METHODS");
+  assert.equal(anchorSections([SECTIONS[0], { heading: "II. METHODS" }], paper).missing, "II. METHODS");
+  assert.equal(anchorSections([{ heading: "II. METHODS" }], paper).sections[0].start, 0, "an unfound FIRST section starts the paper");
   const backwards = anchorSections([SECTIONS[4], SECTIONS[1]], paper);
   assert.equal(backwards.missing, "I. INTRODUCTION", "searching only forward keeps the paper's order");
   assert.equal(anchorSections([{ heading: "Surveys" }], paper).sections[0].start, 3, "a line's start, not its middle");
-  assert.equal(anchorSections([{ heading: "list item" }], paper).missing, "list item");
+  assert.equal(anchorSections([SECTIONS[0], { heading: "list item" }], paper).missing, "list item");
 });
 
 await test("the paper is sent as lines with page markers and no line numbers", () => {
@@ -136,6 +137,34 @@ await test("a printed heading lands despite numbering, column-merging and a long
   assert.equal(bodies[0].text, "Maarten Baes and Jules Dierickx", "a title over two lines is one heading");
   assert.equal(bodies[1].text, "We compare each method with the analytic solution.", "the merged fragment is not body");
   assert.equal(bodies[2].text, "Mass is conserved to machine precision.");
+});
+
+await test("a contents page is not where sections start", () => {
+  const withToc = [
+    ["Contents", 2, 700], ["1 Introduction 2", 2, 690], ["4.2 Galaxy survey priors 11", 2, 680],
+    ["A Dark sector phase transition 26", 2, 670],
+    ["1 Introduction", 3, 700], ["Pulsar timing arrays have…", 3, 690],
+    ["4.2 Galaxy survey priors", 12, 500], ["We adopt priors from surveys.", 12, 490],
+    ["A Dark sector phase transition", 27, 600], ["The spectrum peaks at…", 27, 590],
+  ].map(([str, page, y]) => ({ str, page, y }));
+  const { sections } = anchorSections(
+    [{ heading: "1 Introduction" }, { heading: "4.2 Galaxy survey priors" }, { heading: "A Dark sector phase transition" }],
+    withToc,
+  );
+  assert.deepEqual(sections.map((s) => s.page), [3, 12, 27]);
+});
+
+await test("a title the first heading cannot find still starts the paper", () => {
+  const badge = [
+    ["Resources Policy 50 (2016) 276–288", 1, 760], ["Returns and volatility linkages between oil, metal", 1, 740],
+    ["crossmark", 1, 735], ["and other stock indices in India", 1, 728], ["1. Introduction", 1, 400], ["Oil matters.", 1, 390],
+  ].map(([str, page, y]) => ({ str, page, y }));
+  const { sections, unplaced } = anchorSections(
+    [{ heading: "Returns and volatility linkages between oil, metal and other stock indices in India", title: "Title" }, { heading: "1. Introduction" }],
+    badge,
+  );
+  assert.equal(unplaced, 0);
+  assert.deepEqual(sections.map((s) => [s.start, s.unplaced]), [[0, false], [4, false]]);
 });
 
 await test("Opus and Gemini are sent the PDF itself, in the one shape both take", async () => {

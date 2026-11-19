@@ -125,19 +125,21 @@ export function detectColumns(items, pageWidth) {
 // pages of centred equations that cluster into two. Per-page verdicts overlap
 // badly; the majority vote across pages separates cleanly.
 export function columnVerdict(pages) {
-  let votes = 0;
-  let boundarySum = 0;
+  const ratios = [];
   for (const page of pages) {
     const columns = detectColumns(page.items, page.width);
-    if (columns.count === 2) {
-      votes += 1;
-      boundarySum += columns.boundary / page.width;
-    }
+    if (columns.count === 2) ratios.push(columns.boundary / page.width);
   }
+  const votes = ratios.length;
   if (!pages.length || votes < MIN_TWO_COLUMN_PAGES * pages.length) {
     return { count: 1, boundaryRatio: 0, votes };
   }
-  return { count: 2, boundaryRatio: boundarySum / votes, votes };
+  // The median, not the mean: a page whose gutter came out odd (a figure, a
+  // table) must not drag the paper-wide value into a column. That is what
+  // happened on an Elsevier paper (2026-11-19): the mean fell at x≈286, inside
+  // the left column, and its lines alternated with the right column's.
+  ratios.sort((a, b) => a - b);
+  return { count: 2, boundaryRatio: ratios[Math.floor(ratios.length / 2)], votes };
 }
 
 // Full-width lines split the page into bands. Within a band the left column is
@@ -163,11 +165,48 @@ function emitBands(spanning, columns) {
   return out;
 }
 
+// A full-width line built from several runs — an abstract box, a wide caption —
+// can have no single run that crosses the gutter, so the per-run test alone
+// sent its left pieces to the left column and its right pieces to the right
+// ("threshold and" / "exponential" / "and both symmetric…" on an Elsevier
+// abstract, 2026-11-19). Such a row is recognised by its runs meeting across
+// the gutter with only a word space between them: two real columns are kept
+// apart by the gutter itself, several word spaces wide.
+const MAX_WORD_GAP = 0.8; // × body height
+
+function rowsRunningAcross(items, boundary, tolerance, body) {
+  const across = new Set();
+  const sorted = [...items].sort((a, b) => a.y - b.y);
+  let row = [];
+  const flush = () => {
+    const byX = row.sort((a, b) => a.x - b.x);
+    for (let i = 0; i + 1 < byX.length; i++) {
+      const a = byX[i];
+      const b = byX[i + 1];
+      const gap = b.x - (a.x + a.width);
+      if (a.x + a.width / 2 < boundary && b.x + b.width / 2 >= boundary && gap < Math.max(4, MAX_WORD_GAP * body)) {
+        for (const item of row) across.add(item);
+        break;
+      }
+    }
+    row = [];
+  };
+  for (const item of sorted) {
+    if (row.length && Math.abs(item.y - row[0].y) > tolerance) flush();
+    row.push(item);
+  }
+  if (row.length) flush();
+  return across;
+}
+
 export function layoutPage(page, { bodyHeight, columnCount, boundaryRatio } = {}) {
   const body = bodyHeight || modalHeight(page.items) || 10;
   const tolerance = LINE_TOLERANCE * body;
-  const boundary = boundaryRatio ? boundaryRatio * page.width : page.width / 2;
   const twoColumn = columnCount === 2 && page.items.length >= MIN_ITEMS_FOR_SPLIT;
+  // A page's own gutter where it shows one; the paper-wide value otherwise (a
+  // page that is mostly one full-width table, the title page).
+  const own = twoColumn ? detectColumns(page.items, page.width) : null;
+  const boundary = own?.count === 2 ? own.boundary : boundaryRatio ? boundaryRatio * page.width : page.width / 2;
 
   if (!twoColumn) {
     return {
@@ -179,8 +218,9 @@ export function layoutPage(page, { bodyHeight, columnCount, boundaryRatio } = {}
   }
 
   const buckets = [[], [], []]; // left, right, spanning
+  const runsAcross = rowsRunningAcross(page.items, boundary, tolerance, body);
   for (const item of page.items) {
-    if (straddles(item, boundary)) buckets[2].push(item);
+    if (straddles(item, boundary) || runsAcross.has(item)) buckets[2].push(item);
     else buckets[item.x + item.width / 2 < boundary ? 0 : 1].push(item);
   }
 

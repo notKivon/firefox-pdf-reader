@@ -14,10 +14,22 @@ const QUOTE_MIN_WORDS = 4;
 // so exact equality is not required — but a stretch that carries most of a
 // fifteen-word quote in order is not a coincidence.
 const QUOTE_MIN_SHARE = 0.8;
+const QUOTE_MIN_RUN = 10;
+const QUOTE_MIN_PART = 0.6;
+
+// Greek letters by name, on both sides: a model that read "θ1" in the PDF may
+// write "theta1" (an Elsevier paper, 2026-11-19), and the text layer has θ.
+const GREEK = {
+  α: "alpha", β: "beta", γ: "gamma", δ: "delta", ε: "epsilon", ϵ: "epsilon", ζ: "zeta", η: "eta",
+  θ: "theta", ϑ: "theta", ι: "iota", κ: "kappa", λ: "lambda", μ: "mu", ν: "nu", ξ: "xi", π: "pi",
+  ρ: "rho", σ: "sigma", ς: "sigma", τ: "tau", υ: "upsilon", φ: "phi", ϕ: "phi", χ: "chi", ψ: "psi", ω: "omega",
+};
 
 const plainWords = (str) =>
   String(str ?? "")
+    .normalize("NFKC") // ﬁ, ﬀ and other ligature glyphs to their letters
     .toLowerCase()
+    .replace(/[α-ωϵϑϕς]/g, (c) => GREEK[c] ?? c)
     .replace(/[^\p{L}\p{N}]+/gu, " ")
     .split(" ")
     .filter(Boolean);
@@ -45,9 +57,15 @@ function inOrder(stream, from, width, quote) {
   let q = 0;
   let firstHit = -1;
   let lastHit = -1;
-  for (let i = from; i < Math.min(stream.length, from + width) && q < quote.length; i++) {
-    if (stream[i].word === quote[q]) {
+  const end = Math.min(stream.length, from + width);
+  for (let i = from; i < end && q < quote.length; i++) {
+    // A word the text layer broke at a ligature comes out as two pieces, even
+    // on two lines ("signi" / "ficant"); two adjacent pieces that make the
+    // quoted word count as it.
+    const joined = i + 1 < end && stream[i].word + stream[i + 1].word === quote[q];
+    if (stream[i].word === quote[q] || joined) {
       if (firstHit < 0) firstHit = i;
+      if (joined) i++;
       lastHit = i;
       q++;
     }
@@ -66,7 +84,11 @@ export function locateQuote(quote, lines) {
   const want = plainWords(quote);
   if (want.length < QUOTE_MIN_WORDS) return null;
   const stream = wordStream(lines);
-  const slack = Math.ceil(want.length * 0.4);
+  // Up to twice the quote's length: stray words can sit inside a quoted passage —
+  // a table caption between columns, a keywords sidebar beside an abstract
+  // (an Elsevier paper, 2026-11-19). The 80% in-order rule and the tightest
+  // stretch still decide.
+  const slack = want.length;
   let best = null;
   for (let from = 0; from < stream.length; from++) {
     if (stream[from].word !== want[0] && stream[from].word !== want[1]) continue;
@@ -76,6 +98,11 @@ export function locateQuote(quote, lines) {
     const tighter = best && hit.matched === best.matched && hit.lastHit - hit.firstHit < best.lastHit - best.firstHit;
     if (hit.matched > (best?.matched ?? 0) || tighter) best = hit;
   }
-  if (!best || best.matched < QUOTE_MIN_SHARE * want.length) return null;
+  // Most of the quote in order — or, when a table or figure interrupts the
+  // quoted sentence (Table 1 mid-paragraph on an Elsevier page, 2026-11-19), a
+  // long enough stretch of it: ten words in order, from the quote's start, are
+  // not a coincidence.
+  const enough = best && (best.matched >= QUOTE_MIN_SHARE * want.length || (best.matched >= QUOTE_MIN_RUN && best.matched >= QUOTE_MIN_PART * want.length));
+  if (!enough) return null;
   return spanTarget(lines, stream[best.firstHit].line, stream[best.lastHit].line);
 }

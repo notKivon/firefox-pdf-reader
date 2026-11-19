@@ -263,6 +263,11 @@ The escape hatch above, taken — by Ollama rather than by Gemini, and for a dif
 - `viewer/back-jump.js`: `remember()` (first of a run only, as a share of scroll height), `back()`, `dismiss()`; `#jump-back` in the PDF pane; Alt+← / Escape.
 - `PROMPT_VERSION` 5, `CHAT_PROMPT_VERSION` 4. `tools/paper-probe.mjs` reports quote/word/heading placement and takes `--out`.
 
+## Contents pages, Elsevier layouts (step 28)
+- `anchor.js#starts`: a line that is the heading followed only by a 1–4 digit number is a contents entry and does not match. An unfound first section is placed at line 0, not unplaced.
+- `columns.js`: `columnVerdict` takes the median page ratio; `layoutPage` uses the page's own `detectColumns` boundary when it finds two columns; `rowsRunningAcross` marks every run of a row whose neighbouring runs meet across the boundary with a gap under max(4, 0.8 × body height) as spanning.
+- `locate-quote.js`: NFKC (ligature glyphs), Greek letters → names, two adjacent stream words may make one quoted word, window = 2 × quote length, accept ≥ 80% or (≥ 10 words and ≥ 60%).
+
 ## store/db.js
 IndexedDB `scholar-reader`, version 1:
 - `docs` — key `hash`; `{ hash, title, authors, doi, arxivId, pageCount, urls[], lastOpened, lastPage, scrollTop }`

@@ -6,7 +6,8 @@ import assert from "node:assert/strict";
 
 const { isHeading } = await import("../../src/extract/sections.js");
 const { buildSections } = await import("../../src/extract/assemble.js");
-const { detectColumns } = await import("../../src/extract/columns.js");
+const { detectColumns, layoutPage } = await import("../../src/extract/columns.js");
+globalThis.__layoutPage = { layoutPage };
 
 let passed = 0;
 const results = [];
@@ -51,6 +52,22 @@ test("the gutter is the gap between the columns, not the midpoint of their centr
   const columns = detectColumns(items, 612);
   assert.equal(columns.count, 2);
   assert.ok(columns.boundary > 300 && columns.boundary < 312, `gutter at ${columns.boundary}`);
+});
+
+test("a full-width line made of several runs is not split at the gutter", () => {
+  const { layoutPage } = globalThis.__layoutPage;
+  const run = (str, x, width, y) => ({ str, x, width, y, height: 6.4, fontName: "f", pdfY: 800 - y });
+  const items = [];
+  // A two-column page: 12 rows per column, gutter between x=290 and x=307.
+  for (let r = 0; r < 12; r++) {
+    items.push(run(`left ${r}`, 38, 252, 300 + r * 8), run(`right ${r}`, 307, 251, 300 + r * 8));
+  }
+  // An abstract line across the gutter, in three runs that meet with word gaps.
+  items.push(run("threshold and", 203, 47, 100), run("exponential", 254, 38, 100), run("and both symmetric versions", 296, 262, 100));
+  const page = layoutPage({ pageNumber: 1, width: 595, items }, { bodyHeight: 6.4, columnCount: 2, boundaryRatio: 0.49 });
+  const abstract = page.lines.find((l) => l.str.includes("exponential"));
+  assert.equal(abstract.str, "threshold and exponential and both symmetric versions");
+  assert.ok(page.lines.some((l) => l.str === "left 3") && page.lines.some((l) => l.str === "right 3"), "real columns still split");
 });
 
 test("the text before the first heading is kept as its own section", () => {
