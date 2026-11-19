@@ -33,7 +33,7 @@ const CONCURRENCY = 3;
  *   a provider that chooses its own sections (model-sections.js)
  * @returns {Promise<{sections, tldr, providerId, model, strategy, usage}>}
  */
-export async function outline({ sections, providerId, resolveKey, meta, onProgress, onAlive, onProviderChange, signal, order, paper }) {
+export async function outline({ sections, providerId, resolveKey, meta, onProgress, onAlive, onProviderChange, signal, order, paper, pdf }) {
   // CLAUDE.md keeps empty-text sections (a parent heading whose first subsection
   // follows immediately) because they carry the paper's structure. They cannot
   // be summarised and are never sent; they come back bullet-less, in place.
@@ -53,7 +53,7 @@ export async function outline({ sections, providerId, resolveKey, meta, onProgre
     tried.push(id);
     if (tried.length > 1) onProviderChange?.(id);
     try {
-      const result = await run({ id, sendable, resolveKey, meta, onProgress, onAlive, signal, paper });
+      const result = await run({ id, sendable, resolveKey, meta, onProgress, onAlive, signal, paper, pdf });
       // A model that chose its own sections answered for the paper, not for
       // the extracted sections, so there is nothing to reinsert.
       if (result.modelSections) return result;
@@ -101,7 +101,7 @@ function otherDestinationIds(providerId) {
   return Object.keys(PROVIDERS).filter((id) => PROVIDERS[id].destination !== destination);
 }
 
-async function run({ id, sendable, resolveKey, meta, onProgress, onAlive, signal, paper }) {
+async function run({ id, sendable, resolveKey, meta, onProgress, onAlive, signal, paper, pdf }) {
   const provider = getProvider(id);
   // Asked before the key is even read: a run that cannot finish inside the
   // day's remaining requests should move to the next provider rather than
@@ -142,7 +142,7 @@ async function run({ id, sendable, resolveKey, meta, onProgress, onAlive, signal
 
   const produced =
     usesPaper(provider, paper)
-      ? await paperOutline({ id, provider, paper, meta, call, onProgress })
+      ? await paperOutline({ id, provider, paper, pdf, meta, call, onProgress })
       : provider.strategy === "whole-document"
         ? await wholeDocument({ id, sendable, meta, call, onProgress })
         : await perSection({ id, sendable, meta, call, onProgress });

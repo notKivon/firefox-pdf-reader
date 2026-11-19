@@ -71,6 +71,9 @@ function gemini4(label, model) {
     pricing: null,
     promptStyle: "guidelines",
     sections: "model",
+    // Sent the PDF itself (model/pdf.js); ~12k tokens for a 7-page paper.
+    pdf: true,
+    pdfTokensPerPage: 1_700,
     supports: { jsonSchema: true, streaming: true, reasoningOff: false },
   };
 }
@@ -90,6 +93,10 @@ function claudeVia(label, model, promptStyle) {
     // The model reads the whole paper and chooses its sections; this machine
     // places them (model/model-sections.js, extract/anchor.js).
     sections: "model",
+    // Sent the PDF itself, as a document block via the bridge (model/pdf.js);
+    // ~24k tokens for a 7-page paper.
+    pdf: true,
+    pdfTokensPerPage: 3_400,
     supports: { jsonSchema: true, streaming: true, reasoningOff: false },
   };
 }

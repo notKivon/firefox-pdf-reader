@@ -77,7 +77,14 @@ export function createChatPane({ root, onJump }) {
   }
 
   async function replan(providerId) {
-    plan = await ask({ type: "chat-plan", hash: doc.hash, sections: forSending(doc.sections), meta: doc.meta, providerId });
+    plan = await ask({
+      type: "chat-plan",
+      hash: doc.hash,
+      sections: forSending(doc.sections),
+      meta: doc.meta,
+      providerId,
+      pdfInfo: doc.pdf?.data ? { size: doc.pdf.data.byteLength, pages: doc.pdf.pages } : undefined,
+    });
     drawPicker();
     where.replaceChildren(...disclosure(plan));
   }
@@ -95,6 +102,13 @@ export function createChatPane({ root, onJump }) {
 
   async function send(question) {
     setBusy(true);
+    // The box empties as the question goes, the way a message box does. If the
+    // question comes back unanswered it is put back, so Try again and editing
+    // start from it rather than from nothing.
+    input.value = "";
+    const giveBack = () => {
+      if (!input.value.trim()) input.value = question;
+    };
     const asked = { role: "user", content: question };
     pending = el("div", "chat-msg is-assistant is-pending");
     pending.append(el("p", "pane-placeholder", `${shortLabel(plan.label)} is reading the paper…`));
@@ -110,6 +124,7 @@ export function createChatPane({ root, onJump }) {
         sections: forSending(doc.sections),
         meta: doc.meta,
         providerId: plan.providerId,
+        pdf: doc.pdf ?? undefined,
         question,
       });
     } catch (err) {
@@ -121,15 +136,16 @@ export function createChatPane({ root, onJump }) {
     if (result?.error === "consent-required") {
       plan = result.plan;
       drawLog();
+      giveBack();
       return submit();
     }
     if (result?.error || result === undefined) {
       drawLog();
+      giveBack();
       const text = result?.message ?? "The background did not answer.";
       notice.replaceChildren(errorBox(`Your question was not answered: ${text}`, { retry: () => submit().catch(fail) }));
       return;
     }
-    input.value = "";
     history = [...history, { ...asked, providerId: result.providerId }, { role: "assistant", content: result.reply, providerId: result.providerId }];
     drawLog();
     if (result.warning) notice.replaceChildren(el("p", "pane-note", result.warning));
@@ -188,10 +204,10 @@ export function createChatPane({ root, onJump }) {
   }
 
   /** @param {{hash, sections, meta, scanned}} extraction */
-  async function start({ hash, sections: all, meta, scanned }) {
+  async function start({ hash, sections: all, meta, scanned, pdf }) {
     if (scanned) return message("This looks like a scanned PDF — there is no text to chat about, and nothing was sent.");
     if (!all.some((section) => section.text.trim())) return message("No text could be extracted from this document, so there is nothing to chat about.");
-    doc = { hash, meta, sections: all };
+    doc = { hash, meta, sections: all, pdf };
     try {
       const [past] = await Promise.all([ask({ type: "chat-history", hash }), replan(undefined)]);
       history = past.messages;

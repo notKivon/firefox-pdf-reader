@@ -2,7 +2,9 @@
 // and the running bridge, with the model choosing the sections:
 //
 //   node tools/extract-pdf.mjs paper.pdf --json /tmp/paper.json
-//   node tools/paper-probe.mjs /tmp/paper.json [provider]
+//   node tools/paper-probe.mjs /tmp/paper.json [provider] [--pdf paper.pdf] [--port 8765]
+//
+// With --pdf, the PDF itself is sent, as the extension sends it.
 //
 // Spends subscription usage (or Gemini quota). Reports where each section the
 // model chose landed on the paper.
@@ -10,7 +12,11 @@ import { readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 
-const [file, providerId = "claude-opus"] = process.argv.slice(2);
+const args = process.argv.slice(2);
+const flag = (name) => (args.includes(name) ? args[args.indexOf(name) + 1] : null);
+const [file, providerId = "claude-opus"] = args.filter((a, i) => !a.startsWith("--") && !args[i - 1]?.startsWith("--"));
+const pdfPath = flag("--pdf");
+const port = flag("--port");
 const { sections, paper } = JSON.parse(readFileSync(file, "utf8"));
 const token = readFileSync(join(homedir(), ".config", "scholar-reader", "bridge-token"), "utf8").trim();
 const store = { "claude-bridge": token };
@@ -21,17 +27,24 @@ globalThis.fetch = (url, init = {}) =>
 const { installIndexedDb } = await import("./test/idb.mjs");
 installIndexedDb();
 const { outline } = await import("../src/model/adapter.js");
+const { PROVIDERS } = await import("../src/model/providers.js");
+if (port && PROVIDERS[providerId].bridge) PROVIDERS[providerId].baseUrl = `http://127.0.0.1:${port}/v1/`;
+const pdf = pdfPath ? { data: new Uint8Array(readFileSync(pdfPath)), pages: Number(flag("--pages") ?? 0) || null } : null;
+if (pdf && !pdf.pages) {
+  const { getDocument } = await import("pdfjs-dist/legacy/build/pdf.mjs");
+  pdf.pages = (await getDocument({ data: pdf.data.slice(), verbosity: 0 }).promise).numPages;
+}
 
 const started = Date.now();
 let updates = 0;
 const result = await outline({
-  sections, paper, providerId, meta: { title: sections[0]?.text.slice(0, 80) },
+  sections, paper, pdf, providerId, meta: { title: sections[0]?.text.slice(0, 80) },
   resolveKey: async (ref) => store[ref] ?? null,
   onProgress: () => updates++,
 });
 console.log(`${providerId}: ${Math.round((Date.now() - started) / 1000)} s, ${updates} progress updates, ${result.sections.length} sections`);
 console.log(`usage ${JSON.stringify(result.usage)}\nTL;DR: ${result.tldr}\n`);
 for (const s of result.sections) {
-  console.log(`p${s.page} y${Math.round(s.y)}  ${s.title}   ← "${s.heading}"`);
+  console.log(`p${s.page} y${Math.round(s.y)}  ${s.title}   ← "${s.heading}"${s.unplaced ? "  [UNPLACED]" : ""}`);
   for (const b of s.bullets) console.log(`     - ${b}`);
 }

@@ -81,7 +81,14 @@ function sectionBlock(section, onJump, partial, lines) {
     el("span", "outline-title-text", normalizeText(section.title)),
   );
   jumpable(heading, targetOf(section), onJump);
-  block.append(heading, section.bullets?.length ? bulletList(section, onJump, lines) : emptyBody(section, partial));
+  block.append(heading);
+  // Said, not hidden: the model named this heading but it is not in the text
+  // layer, so its links go to the section before it (extract/anchor.js).
+  if (section.unplaced) {
+    block.classList.add("is-unplaced");
+    block.append(el("p", "outline-unplaced", "This heading isn't in the PDF's text layer, so it jumps to the section before."));
+  }
+  block.append(section.bullets?.length ? bulletList(section, onJump, lines) : emptyBody(section, partial));
   return block;
 }
 

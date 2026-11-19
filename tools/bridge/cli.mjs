@@ -51,13 +51,15 @@ const emptyDir = mkdtempSync(join(tmpdir(), "scholar-bridge-"));
  * @param {string} args.system
  * @param {string} args.user
  * @param {object|null} args.schema JSON schema for structured output; null for text
+ * @param {string[]} [args.documents] base64 PDFs, sent as document blocks so the
+ *   model reads the rendered pages, not a text layer
  * @param {AbortSignal} args.signal aborts the child
  * @param {(text: string) => void} args.onDelta a slice of the JSON, or of the text
  * @param {() => void} args.onReset the model started its answer over
  * @param {() => void} args.onAlive any sign the run is still working
  * @returns {Promise<{structured?: object, text?: string, usage: object}>}
  */
-export function runClaude({ model, system, user, schema, signal, onDelta, onReset, onAlive }) {
+export function runClaude({ model, system, user, schema, documents = [], signal, onDelta, onReset, onAlive }) {
   const args = [
     "-p",
     "--model", model,
@@ -70,13 +72,16 @@ export function runClaude({ model, system, user, schema, signal, onDelta, onRese
     "--strict-mcp-config",
     "--no-session-persistence",
     "--setting-sources", "",
+    // A PDF can only travel as a document block, which only the stream-json
+    // input carries; plain text keeps going in as the prompt itself.
+    ...(documents.length ? ["--input-format", "stream-json"] : []),
   ];
   const child = spawn(claudeBin(), args, { cwd: emptyDir, env: childEnv(), stdio: ["pipe", "pipe", "pipe"] });
   const kill = () => child.kill("SIGTERM");
   signal?.addEventListener("abort", kill, { once: true });
 
   child.stdin.on("error", () => {}); // An early exit closes stdin; the exit code says why.
-  child.stdin.end(user);
+  child.stdin.end(documents.length ? streamInput(documents, user) : user);
 
   let stderr = "";
   child.stderr.on("data", (chunk) => {
@@ -110,6 +115,14 @@ export function runClaude({ model, system, user, schema, signal, onDelta, onRese
       }
     });
   });
+}
+
+function streamInput(documents, text) {
+  const content = [
+    ...documents.map((data) => ({ type: "document", source: { type: "base64", media_type: "application/pdf", data } })),
+    { type: "text", text },
+  ];
+  return `${JSON.stringify({ type: "user", message: { role: "user", content } })}\n`;
 }
 
 function handleLine(line, state, { onDelta, onReset, onAlive }) {

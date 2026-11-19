@@ -388,3 +388,12 @@
   outline: 2px solid var(--accent);
   outline-offset: 1px;
 }
+
+/* A section whose heading the model named but the text layer lacks
+   (extract/anchor.js): kept, and said so. */
+.outline-unplaced {
+  margin: 2px 0 4px;
+  color: var(--text-dim);
+  font-size: 11.5px;
+  font-style: italic;
+}

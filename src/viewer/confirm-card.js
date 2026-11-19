@@ -35,7 +35,11 @@ function destinationLine(plan) {
 // "What exactly gets sent" deserves an honest answer, and the section titles are
 // the short one. The References cutoff has already run, so this list is what
 // goes — nothing more.
-function whatGetsSent(titles, modelSections) {
+function whatGetsSent(titles, modelSections, pdf) {
+  if (pdf) {
+    const mb = (pdf.size / 1024 / 1024).toFixed(1);
+    return el("p", "confirm-meta", `What gets sent: this PDF itself (${plural(pdf.pages, "page")}, ${mb} MB). The model reads the pages as printed and chooses its sections.`);
+  }
   if (modelSections) {
     return el(
       "p",
@@ -75,7 +79,7 @@ export function confirmCard(plan, { onConfirm, onPickProvider }) {
   if (plan.estCost !== null && plan.estCost !== undefined) {
     card.append(el("p", "confirm-cost", costLine(plan.estCost)));
   }
-  card.append(whatGetsSent(plan.sectionTitles, plan.modelSections));
+  card.append(whatGetsSent(plan.sectionTitles, plan.modelSections, plan.pdf));
 
   // Said before the click rather than discovered after it. The button stays
   // live regardless: consent is permission, not success, and a grant recorded

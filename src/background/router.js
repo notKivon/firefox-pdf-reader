@@ -56,6 +56,7 @@ export async function runOutline(request, tabId, { watchdog } = {}) {
     result = await generateOutline({
       sections: request.sections,
       paper: request.paper,
+      pdf: request.pdf,
       providerId: detail.providerId,
       meta: request.meta,
       order: detail.order,

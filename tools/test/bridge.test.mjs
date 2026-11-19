@@ -156,6 +156,30 @@ await test("a chat turn runs without a schema and carries the earlier turns", as
   assert.match(stdin, /The reader's new message:\n\nSecond\?$/);
 });
 
+await test("a PDF reaches Claude Code as a document block, never as text", async () => {
+  const { chatText } = await import("../../src/model/openai-compat.js");
+  const { pdfPart } = await import("../../src/model/pdf.js");
+  process.env.FAKE_CLAUDE_TEXT = "Three authors.";
+  await chatText({
+    providerId: "claude-opus",
+    provider,
+    apiKey: token,
+    messages: [
+      { role: "system", content: "READ THE PDF" },
+      { role: "user", content: [pdfPart(new Uint8Array([37, 80, 68, 70])), { type: "text", text: "Who wrote it?" }] },
+    ],
+  });
+  const { argv, stdin } = JSON.parse(readFileSync(argvFile, "utf8"));
+  assert.equal(argv[argv.indexOf("--input-format") + 1], "stream-json");
+  const message = JSON.parse(stdin.trim());
+  assert.deepEqual(message.message.content[0], {
+    type: "document",
+    source: { type: "base64", media_type: "application/pdf", data: "JVBERg==" },
+  });
+  assert.equal(message.message.content[1].text, "Who wrote it?");
+  assert.doesNotMatch(message.message.content[1].text, /base64/, "the bytes are not pasted into the prompt");
+});
+
 server.close();
 globalThis.fetch = realFetch;
 console.log(results.join("\n"));

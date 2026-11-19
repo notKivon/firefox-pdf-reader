@@ -7,7 +7,9 @@
 // 2 (2026-11-18): extraction reads columns properly and keeps the front matter,
 // and the Claude and Gemini providers now choose their own sections
 // (paper-prompt.js). Outlines built on the old sections are not served.
-export const PROMPT_VERSION = 2;
+// 3 (2026-11-19): the PDF itself is sent to the providers that take one, and
+// headings are copied as printed.
+export const PROMPT_VERSION = 3;
 
 export const MAX_BULLET_WORDS = 20;
 

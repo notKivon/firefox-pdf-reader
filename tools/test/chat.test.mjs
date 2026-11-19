@@ -127,7 +127,7 @@ await test("the pane says where Send goes, and Send records the grant and sends"
   chatPane = createChatPane({ root, onJump: (t) => jumps.push(t) });
   await chatPane.start({ hash, meta, sections, scanned: false });
   for (let i = 0; i < 20 && !root.find("chat-input"); i++) await settle();
-  assert.match(root.find("chat-where").textContent, /Send shares this paper .* with Anthropic \(Claude Opus 5\.5\), through Claude Code/);
+  assert.match(root.find("chat-where").textContent, /Send shares this paper's text .* with Anthropic \(Claude Opus 5\.5\), through Claude Code/);
   const input = root.find("chat-input");
   input.value = "What is new?";
   const calls = say("It corrects bias [§ 3 INITIALIZATION BIAS CORRECTION].");
@@ -222,6 +222,41 @@ await test("once an outline is up, chat links point at its sections", async () =
   assert.match(calls[0].body.messages[0].content, /Title: Title and abstract\n\nAdam is an optimiser\./);
   root.find("chat-cite").click();
   assert.deepEqual(jumps, [{ page: 1, y: 720 }]);
+});
+
+await test("the box empties as the question goes, and gets it back if it fails", async () => {
+  const hash = hashOf("a");
+  const root = new FakeNode("div");
+  const pane = createChatPane({ root, onJump: () => {} });
+  await pane.start({ hash, meta, sections, scanned: false });
+  for (let i = 0; i < 20 && !root.find("chat-input"); i++) await settle();
+  const input = root.find("chat-input");
+  let release;
+  installFetch(() => new Promise((r) => { release = r; }));
+  input.value = "Who are the authors?";
+  root.find("chat-send").click();
+  for (let i = 0; i < 20 && !release; i++) await settle();
+  assert.equal(input.value, "", "cleared on Send, before any answer");
+  release(new Response(JSON.stringify({ error: { message: "boom" } }), { status: 500 }));
+  for (let i = 0; i < 30 && !root.find("pane-error"); i++) await settle();
+  assert.equal(input.value, "Who are the authors?", "an unanswered question comes back to the box");
+});
+
+await test("with the PDF, chat sends the PDF and the section titles to cite", async () => {
+  const hash = hashOf("b");
+  await ask({ type: "grant", kind: "chat", hash, providerId: "claude-opus", cacheKey: chatKey(hash, "claude-opus") });
+  const calls = say("Thavhana, Nyirenda and Lochner.");
+  const pdf = { data: new Uint8Array([37, 80, 68, 70]), pages: 7 };
+  const plan = await ask({ type: "chat-plan", hash, sections, meta, pdfInfo: { size: 4, pages: 7 } });
+  assert.equal(plan.viaPdf, true);
+  assert.equal(plan.estTokens, 7 * 3_400);
+  await ask({ type: "chat", hash, sections, meta, pdf, question: "Who are the authors?" });
+  const [system, first] = calls[0].body.messages;
+  assert.match(system.content, /attached as a PDF/);
+  assert.match(system.content, /- 2 ALGORITHM\n/, "the titles to cite");
+  assert.doesNotMatch(system.content, /Title: 2 ALGORITHM\n\n/, "not the extracted text as well");
+  assert.equal(first.content[0].image_url.url, "data:application/pdf;base64,JVBERg==");
+  assert.equal(first.content[1].text, "Who are the authors?");
 });
 
 await test("a scanned paper offers no chat and sends nothing", async () => {

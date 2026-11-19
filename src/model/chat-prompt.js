@@ -4,7 +4,11 @@
 //
 // CHAT_PROMPT_VERSION: bump on any change to the text below, so a reader who
 // approved one prompt is asked again before a different one sends their paper.
-export const CHAT_PROMPT_VERSION = 1;
+// 2 (2026-11-19): the PDF itself is attached where the provider takes one, and
+// the sections are given as the list to cite from.
+import { pdfPart } from "./pdf.js";
+
+export const CHAT_PROMPT_VERSION = 2;
 
 // How the model names a section it relied on. The viewer turns a citation into
 // a jump link only when the title matches a section extracted on this machine,
@@ -16,7 +20,7 @@ const INSTRUCTIONS = `You are helping a researcher read the academic paper below
 
 Use your judgement on length: a direct question deserves a direct answer. Ground what you say in the paper and say plainly when it does not cover something; if you bring in outside knowledge, mark it as such.
 
-When you rely on a particular section, cite it inline as [§ Title], using that section's title exactly as it appears after "Title:" below — for example [§ 3 Method]. The reader's screen turns those into links to the section.
+When you rely on a particular section, cite it inline as [§ Title], using that section's title exactly as given below — for example [§ 3 Method]. The reader's screen turns those into links to the section.
 
 Write plain text: short paragraphs, and "- " for a list when one helps. No headings, tables or other markdown.`;
 
@@ -27,17 +31,28 @@ Write plain text: short paragraphs, and "- " for a list when one helps. No headi
  * @param {{role: "user"|"assistant", content: string}[]} history earlier turns
  * @param {string} question
  */
-export function chatMessages(sections, meta, history, question) {
+export function chatMessages(sections, meta, history, question, pdf = null) {
+  const header = meta?.title ? `Paper: ${meta.title}\n\n` : "";
+  const turns = [...history.map(({ role, content }) => ({ role, content })), { role: "user", content: question }];
+  if (pdf?.data) {
+    // The PDF rides in the first turn, the same bytes every question, so a
+    // provider that caches a conversation's opening reuses it. The titles are
+    // the list § links are made from; the text is the PDF's own.
+    const titles = sections.map((section) => `- ${section.title}`).join("\n");
+    turns[0] = { role: "user", content: [pdfPart(pdf.data), { type: "text", text: turns[0].content }] };
+    return [
+      {
+        role: "system",
+        content: `${INSTRUCTIONS}\n\nThe paper is attached as a PDF; read it as printed. ${header}Its sections, which are the titles to cite:\n${titles}`,
+      },
+      ...turns,
+    ];
+  }
   const body = sections
     .filter((section) => section.text.trim())
     .map((section) => `Title: ${section.title}\n\n${section.text}`)
     .join("\n\n---\n\n");
-  const header = meta?.title ? `Paper: ${meta.title}\n\n` : "";
-  return [
-    { role: "system", content: `${INSTRUCTIONS}\n\n=== THE PAPER ===\n\n${header}${body}` },
-    ...history.map(({ role, content }) => ({ role, content })),
-    { role: "user", content: question },
-  ];
+  return [{ role: "system", content: `${INSTRUCTIONS}\n\n=== THE PAPER ===\n\n${header}${body}` }, ...turns];
 }
 
 /**

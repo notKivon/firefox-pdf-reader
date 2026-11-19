@@ -97,12 +97,61 @@ await test("Opus is sent the whole paper and its sections land on the paper's ow
   assert.ok(progress.length > 0 && progress.at(-1) <= 5, "the pane fills as sections are placed");
 });
 
-await test("a made-up heading fails the outline and nothing comes back to cache", async () => {
-  reply(answer([...SECTIONS.slice(0, 2), { heading: "II. RELATED WORK", title: "Related", bullets: ["x"] }]));
+await test("one heading not in the text is kept and marked; most of them missing is malformed", async () => {
+  reply(answer([...SECTIONS.slice(0, 2), { heading: "II. RELATED WORK", title: "Related", bullets: ["x"] }, SECTIONS[4]]));
+  const result = await outline({ sections: [{ title: "x", text: "t", page: 1, y: 0 }], paper, providerId: "claude-opus", resolveKey: async () => "k" });
+  const related = result.sections[2];
+  assert.equal(related.unplaced, true);
+  assert.deepEqual([related.page, related.y], [1, 600], "jumps to where the section before it begins — never a guess");
+  assert.deepEqual(result.sections[3].bullets, ["P@10 = 0.600."], "the sections after it still land");
+
+  reply(answer([SECTIONS[0], { heading: "II. METHODS", title: "M", bullets: ["x"] }, { heading: "III. DATA", title: "D", bullets: ["y"] }]));
   await assert.rejects(
     outline({ sections: [{ title: "x", text: "t", page: 1, y: 0 }], paper, providerId: "claude-opus", resolveKey: async () => "k" }),
-    (err) => err.kind === "malformed" && /II\. RELATED WORK/.test(err.message),
+    (err) => err.kind === "malformed" && /2 of the 3/.test(err.message),
   );
+});
+
+await test("a printed heading lands despite numbering, column-merging and a long title", () => {
+  const pdfPaper = [
+    ["Mass-conservative voxelisation of smoothed", 1, 760],
+    ["particles using cumulative kernels", 1, 745],
+    ["Maarten Baes and Jules Dierickx", 1, 730],
+    ["at the central positions of a regular Cartesian subgrid within 4.2. Accuracy of the voxelised density field", 5, 500],
+    ["We compare each method with the analytic solution.", 5, 488],
+    ["4.3 Global mass conservation", 7, 600],
+    ["Mass is conserved to machine precision.", 7, 588],
+    ["Results", 8, 600],
+    ["All methods agree.", 8, 588],
+  ].map(([str, page, y]) => ({ str, page, y }));
+  const { sections, unplaced } = anchorSections([
+    { heading: "Mass-conservative voxelisation of smoothed particles using cumulative kernels", title: "Title" },
+    { heading: "4.2. Accuracy of the voxelised density field", title: "Accuracy" },
+    { heading: "4.3. Global mass conservation", title: "Mass" },
+    { heading: "5. RESULTS", title: "Results" },
+  ], pdfPaper);
+  assert.equal(unplaced, 0);
+  assert.deepEqual(sections.map((s) => s.start), [0, 3, 5, 7]);
+  const bodies = bodiesOf(sections, pdfPaper);
+  assert.equal(bodies[0].text, "Maarten Baes and Jules Dierickx", "a title over two lines is one heading");
+  assert.equal(bodies[1].text, "We compare each method with the analytic solution.", "the merged fragment is not body");
+  assert.equal(bodies[2].text, "Mass is conserved to machine precision.");
+});
+
+await test("Opus and Gemini are sent the PDF itself, in the one shape both take", async () => {
+  const bytes = new Uint8Array([37, 80, 68, 70, 45, 49, 46, 55]); // "%PDF-1.7"
+  for (const providerId of ["claude-opus", "gemini-4-hydrogen"]) {
+    const calls = reply(answer(SECTIONS));
+    await outline({ sections: [{ title: "x", text: "t", page: 1, y: 0 }], paper, pdf: { data: bytes, pages: 2 }, providerId, resolveKey: async () => "k" });
+    const content = calls[0].body.messages.at(-1).content;
+    assert.ok(Array.isArray(content), providerId);
+    assert.equal(content[0].type, "image_url");
+    assert.equal(content[0].image_url.url, "data:application/pdf;base64,JVBERi0xLjc=");
+    assert.doesNotMatch(JSON.stringify(calls[0].body), /\[page 1\]/, "the text layer is not sent as well");
+  }
+  const calls = reply(answer(SECTIONS));
+  await outline({ sections: [{ title: "x", text: "t", page: 1, y: 0 }], paper, pdf: { data: bytes, pages: 101 }, providerId: "claude-opus", resolveKey: async () => "k" });
+  assert.match(calls[0].body.messages.at(-1).content, /\[page 1\]/, "past 100 pages the extracted text goes instead");
 });
 
 await test("the local model still gets the extracted sections", async () => {
@@ -124,6 +173,10 @@ await test("the card's plan counts the whole paper and claims no section count",
   assert.equal(detail.modelSections, true);
   assert.equal(detail.sectionCount, null);
   assert.ok(detail.estTokens > 50);
+  assert.equal(detail.pdf, null, "no PDF offered, none promised");
+  const withPdf = await plan({ hash: "d".repeat(64), sections: [{ title: "x", text: "t", page: 1, y: 0 }], paper, pdfInfo: { size: 3_600_000, pages: 7 }, providerId: "claude-opus" });
+  assert.deepEqual(withPdf.pdf, { size: 3_600_000, pages: 7 });
+  assert.equal(withPdf.estTokens, 7 * 3_400, "PDF pages, not text characters");
   const local = await plan({ hash: "d".repeat(64), sections: [{ title: "x", text: "t", page: 1, y: 0 }], paper, providerId: "ollama" });
   assert.equal(local.modelSections, false);
   assert.equal(local.sectionCount, 1);

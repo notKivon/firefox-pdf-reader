@@ -14,6 +14,7 @@ import { chatMessages } from "../model/chat-prompt.js";
 import { ProviderError } from "../model/errors.js";
 import { estimateTokens, totalChars } from "../model/estimate.js";
 import { chatText } from "../model/openai-compat.js";
+import { pdfTokens, sendsPdf } from "../model/pdf.js";
 import { getProvider, PROVIDERS } from "../model/providers.js";
 import { getApiKey } from "../store/apikeys.js";
 import { chatKey } from "../store/cache-key.js";
@@ -28,10 +29,11 @@ const HASH_RE = /^[0-9a-f]{64}$/;
 const MAX_QUESTION = 8_000;
 
 export const canChat = (provider) => !provider.useNativeEndpoint;
+const pdfShape = (pdf) => (pdf?.data ? { size: pdf.data.byteLength, pages: pdf.pages } : null);
 const chatProviders = (order) => order.filter((id) => PROVIDERS[id] && canChat(PROVIDERS[id]));
 
 /** What a chat turn would send and where, for the pane's card. No network. */
-export async function chatPlan({ hash, sections, meta = {}, providerId }) {
+export async function chatPlan({ hash, sections, meta = {}, providerId, pdfInfo, pdf }) {
   if (typeof hash !== "string" || !HASH_RE.test(hash)) throw new Error("not a document hash.");
   const order = chatProviders(await providerOrder());
   const id = providerId ?? order[0];
@@ -51,7 +53,9 @@ export async function chatPlan({ hash, sections, meta = {}, providerId }) {
     destination: provider.destination,
     bridge: provider.bridge === true,
     sectionCount: sendable.length,
-    estTokens: estimateTokens(totalChars(sendable)),
+    // The PDF's pages when this provider is sent the PDF, the text otherwise.
+    estTokens: sendsPdf(provider, pdfInfo ?? pdfShape(pdf)) ? pdfTokens(provider, (pdfInfo ?? pdfShape(pdf)).pages) : estimateTokens(totalChars(sendable)),
+    viaPdf: sendsPdf(provider, pdfInfo ?? pdfShape(pdf)),
     hasKey: Boolean(await getApiKey(provider.keyRef).catch(() => null)),
     consented: await isConsented(key),
     providers: order.map((other) => ({ id: other, label: PROVIDERS[other].label })),
@@ -84,7 +88,8 @@ export async function runChat(request, tabId, { watchdog } = {}) {
     });
   }
   const history = await chatHistory(request.hash);
-  const messages = chatMessages(request.sections, request.meta, history, question);
+  const viaPdf = sendsPdf(provider, request.pdf);
+  const messages = chatMessages(request.sections, request.meta, history, question, viaPdf ? request.pdf : null);
   const tell = (text) => {
     if (tabId === undefined) return;
     browser.tabs.sendMessage(tabId, { type: PROGRESS_MESSAGE, hash: request.hash, text }).catch(() => {});

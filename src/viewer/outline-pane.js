@@ -11,7 +11,7 @@ import { el } from "./el.js";
 import { errorBox } from "./pane-error.js";
 import { outlineList } from "./outline-list.js";
 import { readyBox } from "./outline-ready.js";
-import { paperForSending, resolvedSections } from "./outline-sections.js";
+import { paperForSending, pdfInfoOf, resolvedSections } from "./outline-sections.js";
 
 // Sections carry their body lines so a bullet can be located against the paper
 // (locate.js). Those lines never leave this page: the router builds the model
@@ -73,6 +73,7 @@ export function createOutlinePane({ root, onJump, onSections, onReady }) {
       hash: current.hash,
       sections: forSending(current.sections),
       paper: paperForSending(current.paper),
+      pdfInfo: pdfInfoOf(current.pdf),
       meta: current.meta,
       providerId,
     });
@@ -125,6 +126,7 @@ export function createOutlinePane({ root, onJump, onSections, onReady }) {
       hash: current.hash,
       sections: forSending(current.sections),
       paper: paperForSending(current.paper),
+      pdf: current.pdf ?? undefined,
       meta: current.meta,
       providerId: detail.providerId,
     });
@@ -191,8 +193,8 @@ export function createOutlinePane({ root, onJump, onSections, onReady }) {
   }
 
   /** @param {{hash, sections, meta, scanned, paper}} doc the extraction result */
-  function start({ hash, sections, meta, scanned, paper }) {
-    current = { hash, sections, meta, paper };
+  function start({ hash, sections, meta, scanned, paper, pdf }) {
+    current = { hash, sections, meta, paper, pdf };
     // No call, no card: a scanned PDF and an empty extraction both have nothing
     // to send, so neither asks (CLAUDE.md).
     if (scanned) {

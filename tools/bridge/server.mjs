@@ -9,7 +9,8 @@ import { createServer } from "node:http";
 import { timingSafeEqual } from "node:crypto";
 import { BridgeError, MODELS, runClaude } from "./cli.mjs";
 
-const MAX_BODY = 16 * 1024 * 1024;
+// A PDF travels base64-encoded inside the request: 32 MB of PDF is ~43 MB.
+const MAX_BODY = 48 * 1024 * 1024;
 // Headers are held this long so an early failure (usage limit, bad model,
 // logged out) still goes back as a real HTTP status rather than inside a 200.
 const HOLD_MS = 8_000;
@@ -51,15 +52,33 @@ function parseRequest(body) {
   }
   const messages = Array.isArray(parsed.messages) ? parsed.messages : [];
   const text = (role) =>
-    messages.filter((m) => m?.role === role && typeof m.content === "string").map((m) => m.content).join("\n\n");
+    messages.filter((m) => m?.role === role).map((m) => textOf(m.content)).filter(Boolean).join("\n\n");
   // With a schema: the outline. Without: a chat turn, answered as plain text.
   const schema = parsed.response_format?.json_schema?.schema ?? null;
   if (schema !== null && typeof schema !== "object") {
     throw new BridgeError("response_format.json_schema.schema is not a schema.", { status: 400 });
   }
-  const turns = messages.filter((m) => (m?.role === "user" || m?.role === "assistant") && typeof m.content === "string");
+  const turns = messages
+    .filter((m) => m?.role === "user" || m?.role === "assistant")
+    .map((m) => ({ role: m.role, content: textOf(m.content) }));
   if (turns.at(-1)?.role !== "user") throw new BridgeError("No user message.", { status: 400 });
-  return { model: parsed.model, system: text("system"), user: transcript(turns), schema };
+  const documents = messages.flatMap((m) => (Array.isArray(m?.content) ? m.content : [])).map(pdfOf).filter(Boolean);
+  return { model: parsed.model, system: text("system"), user: transcript(turns), schema, documents };
+}
+
+// OpenAI-style content: a string, or parts. Text parts are the words; a PDF
+// rides as an image_url data URL, the one form Gemini's compatible endpoint
+// also takes, so the extension sends a single shape to both.
+function textOf(content) {
+  if (typeof content === "string") return content;
+  if (!Array.isArray(content)) return "";
+  return content.filter((p) => p?.type === "text" && typeof p.text === "string").map((p) => p.text).join("\n\n");
+}
+
+const PDF_URL = /^data:application\/pdf;base64,([A-Za-z0-9+/=]+)$/;
+function pdfOf(part) {
+  const match = part?.type === "image_url" && PDF_URL.exec(String(part.image_url?.url ?? ""));
+  return match ? match[1] : null;
 }
 
 // `claude -p` takes one prompt, so earlier turns travel inside it. A single

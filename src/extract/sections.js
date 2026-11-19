@@ -134,18 +134,43 @@ function headingLines(lines, stats) {
 
 // Anchors a bookmark onto the line that starts its section: the first line at
 // or below the bookmark's y on its page, in reading order.
+//
+// The line that carries the bookmark's own title wins, wherever it is on the
+// page: on a two-column page, "the first line below this y in reading order" is
+// in the LEFT column even when the heading is in the right one (an A&A paper,
+// 2026-11-19: 4.2's bookmark landed in 3.3's text and sections came out of
+// order). The y rule is only the fallback, and the result is in reading order.
 function anchorBookmarks(bookmarks, lines) {
   const anchored = [];
+  const used = new Set();
   for (const mark of bookmarks) {
-    let index = lines.findIndex(
-      (line) => line.page === mark.page && (mark.y === null || line.pdfY <= mark.y + 1),
-    );
+    // A figure label can carry the same words ("Multi-Head Attention" in the
+    // Transformer's diagram), so among lines with the title, the one nearest the
+    // bookmark's own y: the y picks the line, the title picks the column.
+    const want = titleKey(mark.title);
+    let index = -1;
+    let distance = Infinity;
+    if (want) {
+      lines.forEach((line, i) => {
+        if (used.has(i) || line.page !== mark.page || !titleKey(line.str).endsWith(want)) return;
+        const d = mark.y === null ? 0 : Math.abs(line.pdfY - mark.y);
+        if (d < distance) [index, distance] = [i, d];
+      });
+    }
+    if (index < 0) {
+      index = lines.findIndex((line) => line.page === mark.page && (mark.y === null || line.pdfY <= mark.y + 1));
+    }
     if (index < 0) index = lines.findIndex((line) => line.page >= mark.page);
-    if (index < 0) continue;
+    if (index < 0 || used.has(index)) continue;
+    used.add(index);
     anchored.push({ index, line: lines[index], title: mark.title });
   }
-  return anchored;
+  return anchored.sort((a, b) => a.index - b.index);
 }
+
+// Letters and digits only, so "4.2. Accuracy" and a bookmark's "Accuracy" compare
+// on their words.
+const titleKey = (str) => String(str ?? "").toLowerCase().replace(/[^\p{L}\p{N}]+/gu, " ").trim();
 
 /**
  * @returns {{sections, source, scanned, bodyHeight, bodyFont, headingCount}}

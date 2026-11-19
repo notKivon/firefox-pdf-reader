@@ -167,6 +167,16 @@ async function main() {
   }
   actions.setSource(source);
   download.setDocument(doc, { title: source.name, url: source.url });
+  // The PDF's own bytes, for the providers that read the pages as printed
+  // (model/pdf.js). pdf.js keeps a copy; asking for it costs no request. A
+  // failure only means the extracted text is sent instead.
+  const pdf = await doc
+    .getData()
+    .then((data) => ({ data, pages: doc.numPages }))
+    .catch((err) => {
+      console.warn("[scholar-reader] PDF bytes unavailable; the extracted text will be sent", err);
+      return null;
+    });
 
   // The two halves of section jumping, and each needs the other: the pane sends
   // the reader to a place in the paper, and where the reader is sends the pane
@@ -227,8 +237,8 @@ async function main() {
     .then((result) => {
       // No sections means no card and no spinner: the pane says why instead.
       if (result) {
-        outlinePane.start({ hash, meta, sections: result.sections, scanned: result.scanned, paper: result.paper });
-        chatPane.start({ hash, meta, sections: result.sections, scanned: result.scanned });
+        outlinePane.start({ hash, meta, sections: result.sections, scanned: result.scanned, paper: result.paper, pdf });
+        chatPane.start({ hash, meta, sections: result.sections, scanned: result.scanned, pdf });
       } else {
         outlinePane.fail("The text layer could not be read, so there is nothing to outline.");
         chatPane.fail("The text layer could not be read, so there is nothing to chat about.");

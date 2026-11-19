@@ -78,7 +78,9 @@ export function disclosure(plan) {
     el(
       "span",
       null,
-      `Send shares this paper (~${plan.estTokens.toLocaleString("en")} tokens) and the conversation so far with ${where}.`,
+      plan.viaPdf
+        ? `Send shares this PDF (~${plan.estTokens.toLocaleString("en")} tokens) and the conversation so far with ${where}.`
+        : `Send shares this paper's text (~${plan.estTokens.toLocaleString("en")} tokens) and the conversation so far with ${where}.`,
     ),
   ];
   if (!plan.hasKey) {

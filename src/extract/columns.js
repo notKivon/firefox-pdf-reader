@@ -62,24 +62,42 @@ function straddleShare(items, boundary) {
   return n / items.length;
 }
 
-// Where the gutter actually is: the gap between the left column's right edge and
-// the right column's left edge. Halfway between the two clusters' centres is
-// NOT the gutter when the columns differ in how full their lines are — on an
-// IEEE page (found 2026-11-18) the left column's justified lines end at x≈300
-// while that midpoint fell at x≈299, so a third of the page's lines "straddled"
-// it and the page voted single-column, and the whole paper was read straight
-// across both columns. Wide runs (a spanning title) are left out of the edges;
-// null when the columns overlap and there is no gap to find.
+// Where the gutter actually is: the x between the two columns' centres that the
+// fewest runs cross, and the middle of the widest stretch at that minimum.
+//
+// Halfway between the centres is NOT the gutter when the columns differ in how
+// full their lines are — on an IEEE page (found 2026-11-18) the left column's
+// justified lines end at x≈300 while that midpoint fell at x≈299, so a third of
+// the page's lines "straddled" it, the page voted single-column, and the whole
+// paper was read across both columns. Nor is "the gap between the columns'
+// edges", tried first: one running header across the middle ("manuscript no.
+// aa63132-26" on an A&A page, 2026-11-19) closes that gap on every page. Least
+// coverage tolerates a header or two and still finds the gutter. Wide runs (a
+// spanning title) are left out; null when nothing narrower lies between.
 function gutter(items, left, right, pageWidth) {
-  let leftEdge = -Infinity;
-  let rightStart = Infinity;
-  for (const item of items) {
-    if (item.width > 0.6 * pageWidth) continue;
-    const mid = item.x + item.width / 2;
-    if (Math.abs(mid - left) <= Math.abs(mid - right)) leftEdge = Math.max(leftEdge, item.x + item.width);
-    else rightStart = Math.min(rightStart, item.x);
+  const runs = items.filter((item) => item.width <= 0.6 * pageWidth);
+  let best = Infinity;
+  let bestStart = null;
+  let bestLength = 0;
+  let runStart = null;
+  for (let x = Math.ceil(left); x <= right; x++) {
+    let crossing = 0;
+    for (const item of runs) if (item.x < x && item.x + item.width > x) crossing++;
+    if (crossing < best) {
+      best = crossing;
+      bestStart = runStart = x;
+      bestLength = 1;
+    } else if (crossing === best) {
+      if (runStart === null) runStart = x;
+      if (x - runStart + 1 > bestLength) {
+        bestStart = runStart;
+        bestLength = x - runStart + 1;
+      }
+    } else {
+      runStart = null;
+    }
   }
-  return rightStart > leftEdge ? (leftEdge + rightStart) / 2 : null;
+  return bestStart === null ? null : bestStart + (bestLength - 1) / 2;
 }
 
 // → { count, centres, boundary, straddle }. `boundary` is the gutter's x.

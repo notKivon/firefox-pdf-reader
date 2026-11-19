@@ -2,8 +2,16 @@
 // Split from outline-pane.js.
 import { anchorSections, bodiesOf } from "../extract/anchor.js";
 
+// The background's rule (model/model-sections.js), kept here rather than
+// imported so this page does not pull the model modules in.
+const MAX_UNPLACED_SHARE = 0.5;
+
 // The whole paper, for a provider that chooses its own sections: text and the
 // position each line already has on this machine, nothing else.
+// The PDF's size and pages, for a plan: enough to say what would be sent, with
+// none of the bytes, which travel only with an actual send.
+export const pdfInfoOf = (pdf) => (pdf?.data ? { size: pdf.data.byteLength, pages: pdf.pages } : undefined);
+
 export const paperForSending = (paper) => (paper ?? []).map(({ page, y, str }) => ({ page, y, str }));
 
 /**
@@ -18,6 +26,6 @@ export function resolvedSections(result, current) {
   if (!result?.sections?.length) return null;
   if (!result.sections.some((section) => section.heading)) return current?.sections ?? null;
   const paper = current?.paper ?? [];
-  const { sections, missing } = anchorSections(result.sections, paper);
-  return missing === null ? bodiesOf(sections, paper) : null;
+  const { sections, unplaced } = anchorSections(result.sections, paper);
+  return unplaced > MAX_UNPLACED_SHARE * sections.length ? null : bodiesOf(sections, paper);
 }

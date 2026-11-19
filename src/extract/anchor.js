@@ -34,78 +34,130 @@ export function paperText(paper) {
 
 export const paperChars = (paper) => paper.reduce((sum, line) => sum + line.str.length + 1, 0);
 
-// Whitespace, case and math styling are not differences; words are. A heading
-// cut at a hyphenated line break is rejoined, so a model that copies it whole
-// still finds it.
+// Words are what match: case, punctuation, math styling and spacing are not
+// differences, so "4.2. Accuracy" and "4.2 Accuracy" are the same heading. A
+// heading cut at a hyphenated line break is rejoined before comparing.
 const norm = (str) =>
   normalizeText(String(str ?? ""))
     .replace(/�/g, "")
     .toLowerCase()
-    .replace(/\s+/g, " ")
+    .replace(/[^\p{L}\p{N}]+/gu, " ")
     .trim();
 
-function startsLine(candidate, heading) {
-  return candidate === heading || candidate.startsWith(`${heading} `) || candidate.startsWith(`${heading}:`);
+// "4 2 accuracy of …" → "accuracy of …"; "iv results" → "results"; "a key
+// findings" → "key findings". The numbering is how the model and the text layer
+// most often disagree, and the least informative part of a heading.
+const NUMBERING = /^(?:(?:\d{1,2}|[ivxl]{1,5}|[a-h])\s+)+/;
+const core = (str) => str.replace(NUMBERING, "");
+const words = (str) => (str ? str.split(" ").length : 0);
+
+function joined(paper, i, k) {
+  let raw = "";
+  for (let j = i; j < Math.min(paper.length, i + k); j++) {
+    const str = paper[j].str;
+    raw = !raw ? str : /\p{Ll}-$/u.test(raw) ? raw.slice(0, -1) + str : `${raw} ${str}`;
+  }
+  return norm(raw);
 }
 
-// A heading may wrap onto a second line; it may also be run in, with body text
-// after it on the same line. → how many lines it takes, or 0 for no match.
-function matchAt(paper, i, heading) {
-  const one = norm(paper[i].str);
-  if (startsLine(one, heading) || startsLine(one, heading.replace(/[.:]$/, ""))) return 1;
-  if (i + 1 >= paper.length || !heading.startsWith(one)) return 0;
-  const two = /\p{Ll}-$/u.test(one) ? one.slice(0, -1) + norm(paper[i + 1].str) : `${one} ${norm(paper[i + 1].str)}`;
-  return startsLine(two, heading) ? 2 : 0;
+const starts = (candidate, heading) => candidate === heading || candidate.startsWith(`${heading} `);
+
+// Three ways a printed heading meets the text layer, tried in this order over
+// the whole remaining paper so the strictest match anywhere wins:
+//   exact   — the line (or up to three lines, for a long title) starts with it;
+//   bare    — the same once numbering is set aside on both sides, so a model
+//             that writes "4.2." where the PDF has "4.2" still lands; a
+//             one-word heading must then be the whole line;
+//   suffix  — the heading ends a line that column-merging prefixed with stray
+//             text ("…regular Cartesian subgrid within 4.2. Accuracy of the
+//             voxelised density field", an A&A paper, 2026-11-19), for headings
+//             of three words or more.
+// → [line index, lines taken], or null.
+function find(paper, from, heading) {
+  const bare = core(heading);
+  const tiers = [
+    (i) => {
+      for (let k = 1; k <= 3; k++) {
+        const c = joined(paper, i, k);
+        if (starts(c, heading)) return k;
+        if (!heading.startsWith(c)) return 0;
+      }
+      return 0;
+    },
+    (i) => {
+      if (!bare) return 0;
+      for (let k = 1; k <= 3; k++) {
+        const c = core(joined(paper, i, k));
+        if (words(bare) >= 2 ? starts(c, bare) : c === bare) return k;
+        if (!bare.startsWith(c)) return 0;
+      }
+      return 0;
+    },
+    (i) => {
+      if (words(bare) < 3) return 0;
+      const c = norm(paper[i].str);
+      return c.endsWith(` ${heading}`) || c.endsWith(` ${bare}`) ? 1 : 0;
+    },
+  ];
+  for (const tier of tiers) {
+    for (let i = from; i < paper.length; i++) {
+      const span = tier(i);
+      if (span) return [i, span];
+    }
+  }
+  return null;
 }
 
 /**
- * Finds each returned heading in the paper, searching forward from the last,
- * so sections stay in the paper's order and a repeated phrase is not matched
+ * Places each returned heading in the paper, searching forward from the last
+ * one placed, so sections keep the paper's order and a phrase is not matched
  * twice.
+ *
+ * A heading that cannot be found is not a guess and not the end of the outline
+ * (2026-11-19, at the user's request: one stray heading used to discard the
+ * whole answer). Its section is kept with its bullets, marked `unplaced`, and
+ * jumps to where the section before it begins — or the top of the paper — and
+ * it is never given lines of its own. The caller decides how many unplaced
+ * sections make the answer unusable.
  *
  * @param {{heading: string, title?: string}[]} returned the model's sections
  * @param {{page, y, str}[]} paper
- * @returns {{sections: {title, heading, page, y, start, end}[], missing: string|null}}
- *   `sections` is every section placed before the first one that could not be;
- *   `missing` names that one, or is null when all were placed.
+ * @returns {{sections: {title, heading, page, y, start, span, end, unplaced}[], unplaced: number, missing: string|null}}
+ *   `missing` names the first heading that could not be placed, or is null.
  */
 export function anchorSections(returned, paper) {
-  const placed = [];
+  const sections = [];
   let from = 0;
   let missing = null;
+  let unplaced = 0;
+  let previous = null;
   for (const section of returned ?? []) {
     const heading = norm(section?.heading);
-    if (!heading) {
-      missing = String(section?.heading ?? "");
-      break;
+    const hit = heading ? find(paper, from, heading) : null;
+    const title = String(section?.title ?? section?.heading ?? "").trim() || String(section?.heading ?? "").trim();
+    if (!hit) {
+      unplaced++;
+      missing ??= String(section?.heading ?? "");
+      const at = previous ?? { page: paper[0]?.page ?? 1, y: paper[0]?.y ?? null };
+      sections.push({ title, heading: String(section?.heading ?? "").trim(), page: at.page, y: at.y, start: -1, span: 0, unplaced: true });
+      continue;
     }
-    let found = -1;
-    let span = 1;
-    for (let i = from; i < paper.length; i++) {
-      span = matchAt(paper, i, heading);
-      if (span) {
-        found = i;
-        break;
-      }
-    }
-    if (found < 0) {
-      missing = String(section.heading);
-      break;
-    }
-    placed.push({
-      title: String(section.title ?? section.heading).trim() || String(section.heading).trim(),
-      heading: String(section.heading).trim(),
-      page: paper[found].page,
-      y: paper[found].y,
-      start: found,
-      span,
-    });
+    const [found, span] = hit;
+    previous = { page: paper[found].page, y: paper[found].y };
+    sections.push({ title, heading: String(section.heading).trim(), page: previous.page, y: previous.y, start: found, span, unplaced: false });
     from = found + span;
   }
-  placed.forEach((section, i) => {
-    section.end = i + 1 < placed.length ? placed[i + 1].start : paper.length;
-  });
-  return { sections: placed, missing };
+  // A placed section runs to the next placed one; an unplaced one has no lines.
+  let next = paper.length;
+  for (let i = sections.length - 1; i >= 0; i--) {
+    if (sections[i].unplaced) {
+      sections[i].end = -1;
+      continue;
+    }
+    sections[i].end = next;
+    next = sections[i].start;
+  }
+  return { sections, unplaced, missing };
 }
 
 /**
@@ -114,18 +166,30 @@ export function anchorSections(returned, paper) {
  */
 export function bodiesOf(placed, paper) {
   return placed.map((section) => {
+    const base = { title: section.title, heading: section.heading, page: section.page, y: section.y, unplaced: section.unplaced === true };
+    if (section.unplaced) return { ...base, text: "", lines: [] };
     const span = section.span ?? 1;
     const lines = paper.slice(section.start + span, section.end);
     const first = paper[section.start];
-    const rest = span === 1 ? first.str.slice(Math.min(first.str.length, section.heading.length)).replace(/^[\s:.]+/, "") : "";
-    const head = rest && norm(first.str).startsWith(norm(section.heading)) ? [{ ...first, str: rest }] : [];
-    return {
-      title: section.title,
-      heading: section.heading,
-      page: section.page,
-      y: section.y,
-      text: joinLines([...head, ...lines]),
-      lines: [...head, ...lines],
-    };
+    // A run-in heading keeps the words after it on its line; what is left of
+    // the line once the heading's own words are taken away.
+    const rest = span === 1 ? remainder(first.str, section.heading) : "";
+    const head = rest ? [{ ...first, str: rest }] : [];
+    return { ...base, text: joinLines([...head, ...lines]), lines: [...head, ...lines] };
   });
+}
+
+function remainder(line, heading) {
+  const want = norm(heading).split(" ").filter(Boolean);
+  const tokens = String(line).split(/\s+/);
+  let used = 0;
+  let matched = 0;
+  while (used < tokens.length && matched < want.length) {
+    const word = norm(tokens[used]);
+    used++;
+    if (!word) continue;
+    for (const part of word.split(" ")) if (part === want[matched]) matched++;
+  }
+  if (matched < want.length || !norm(line).startsWith(norm(heading))) return "";
+  return tokens.slice(used).join(" ").replace(/^[\s:.]+/, "");
 }

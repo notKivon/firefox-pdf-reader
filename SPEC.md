@@ -242,6 +242,13 @@ The escape hatch above, taken — by Ollama rather than by Gemini, and for a dif
 - `PROMPT_VERSION` 2: outlines from before are not served.
 - `tools/extract-pdf.mjs paper.pdf [--json out] [--lines]` runs the extension's own extraction in Node (pdf.js's Node build swapped in); `tools/paper-probe.mjs out.json [provider]` runs one real outline of it.
 
+## Sending the PDF (step 25)
+- `model/pdf.js`: `pdfFits` (≤ 30 MB, ≤ 100 pages), `sendsPdf(provider, pdf)` (`provider.pdf`), `pdfTokens` (per-page estimate on the descriptor: Claude 3,400, Gemini 1,700, measured), `pdfPart(bytes)` → `{type: "image_url", image_url: {url: "data:application/pdf;base64,…"}}`. Gemini's OpenAI-compatible endpoint refuses `type: "file"` and accepts this; the bridge maps it to `{type: "document", source: {type: "base64", media_type: "application/pdf"}}` and runs the CLI with `--input-format stream-json`.
+- The viewer reads the bytes once from pdf.js (`doc.getData()`); `plan`/`chat-plan` get `pdfInfo` (size, pages), `outline`/`chat` get `pdf` (bytes, pages).
+- `paper-prompt.js`: with a PDF, the system prompt says so and the user turn is `[pdf, "Outline the attached paper."]`; headings are copied as printed, number included. `chat-prompt.js`: the PDF in the first user turn, the section titles in the system prompt.
+- `extract/anchor.js` placement tiers, strictest first over the remaining paper: exact start (≤ 3 joined lines), numbering-free start (a one-word heading must be the whole line), suffix of a single line (≥ 3 words). Unplaced sections: kept, `unplaced: true`, target of the previous placed section (or the paper's first line), no lines; > 50% unplaced is malformed (`model-sections.js`) and gets no line placement in the viewer.
+- `PROMPT_VERSION` 3, `CHAT_PROMPT_VERSION` 2.
+
 ## store/db.js
 IndexedDB `scholar-reader`, version 1:
 - `docs` — key `hash`; `{ hash, title, authors, doi, arxivId, pageCount, urls[], lastOpened, lastPage, scrollTop }`
