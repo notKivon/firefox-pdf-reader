@@ -9,19 +9,24 @@
 import { pdfPart } from "./pdf.js";
 
 // 3 (2026-11-19): mathematics as LaTeX, which the viewer typesets (math.js).
-export const CHAT_PROMPT_VERSION = 3;
+// 4 (2026-11-19): a citation may carry a quote, so its link lands on the sentence.
+export const CHAT_PROMPT_VERSION = 4;
 
 // How the model names a section it relied on. The viewer turns a citation into
 // a jump link only when the title matches a section extracted on this machine,
 // and the target comes from that section — never from the model (CLAUDE.md:
 // no position ever comes from the model).
-export const CITATION = /\[§\s*([^\]\n]{1,200}?)\s*\]/g;
+// `[§ Title]`, or `[§ Title | "exact words"]` to point at one sentence: the
+// quote is looked for in that section's own lines (viewer/locate-quote.js) and
+// the link falls back to the heading when it is not found. A bar, not a colon,
+// separates them — section titles have colons of their own.
+export const CITATION = /\[§\s*([^\]\n|]{1,200}?)\s*(?:\|\s*["“'‘]([^"”’\]\n]{3,300})["”'’]\s*)?\]/g;
 
 const INSTRUCTIONS = `You are helping a researcher read the academic paper below. Answer their questions about it.
 
 Use your judgement on length: a direct question deserves a direct answer. Ground what you say in the paper and say plainly when it does not cover something; if you bring in outside knowledge, mark it as such.
 
-When you rely on a particular section, cite it inline as [§ Title], using that section's title exactly as given below — for example [§ 3 Method]. The reader's screen turns those into links to the section.
+When you rely on a particular section, cite it inline as [§ Title], using that section's title exactly as given below — for example [§ 3 Method]. To point at one sentence, add a short quote copied exactly from it: [§ 3 Method | "6 to 15 consecutive words from that sentence"]. The reader's screen turns these into links to the section, or to the quoted sentence.
 
 Write plain text: short paragraphs, and "- " for a list when one helps. No headings, tables or other markdown. Write any mathematics as LaTeX: $...$ inline, $$...$$ for an equation on its own. Do not wrap plain words or numbers in $. The reader's screen typesets it.`;
 
@@ -77,7 +82,7 @@ export function splitCitations(text, sections) {
     const index = byTitle.get(normal(match[1]));
     if (index === undefined) continue;
     if (match.index > last) parts.push({ text: text.slice(last, match.index) });
-    parts.push({ cite: sections[index].title, index });
+    parts.push({ cite: sections[index].title, index, ...(match[2] ? { quote: match[2].trim() } : {}) });
     last = match.index + match[0].length;
   }
   if (last < text.length) parts.push({ text: text.slice(last) });

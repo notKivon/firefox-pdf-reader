@@ -128,12 +128,26 @@ export function locateBullet(bullet, lines) {
   // A span that crosses a page break is reported on the page it starts on:
   // the scroll lands there, and highlighting the rest would need a second band
   // on a page the reader is not looking at.
-  const first = lines[best.start];
-  let last = lines[best.end];
-  if (last.page !== first.page) {
-    let i = best.start;
-    while (i + 1 <= best.end && lines[i + 1].page === first.page) i++;
-    last = lines[i];
-  }
-  return { page: first.page, y: first.y, yEnd: last.y, height: first.height };
+  return spanTarget(lines, best.start, best.end);
+}
+
+// A matched run of lines as a jump target. A span that crosses a page break is
+// reported on the page it starts on: the scroll lands there, and highlighting
+// the rest would need a second band on a page the reader is not looking at.
+// The horizontal extent is that of the lines on that page, so the band covers
+// their column rather than the page's full width.
+export function spanTarget(lines, start, end) {
+  const first = lines[start];
+  let stop = start;
+  while (stop + 1 <= end && lines[stop + 1].page === first.page) stop++;
+  const span = lines.slice(start, stop + 1);
+  const xs = span.map((l) => l.x).filter(Number.isFinite);
+  const rights = span.map((l) => l.right).filter(Number.isFinite);
+  return {
+    page: first.page,
+    y: first.y,
+    yEnd: lines[stop].y,
+    height: first.height,
+    ...(xs.length && rights.length ? { x: Math.min(...xs), xEnd: Math.max(...rights) } : {}),
+  };
 }

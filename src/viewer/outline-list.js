@@ -7,6 +7,7 @@
 import { el } from "./el.js";
 import { normalizeModelText, normalizeText } from "../extract/normalize.js";
 import { locateBullet } from "./locate.js";
+import { locateQuote } from "./locate-quote.js";
 import { repairTex, withMath } from "./math.js";
 
 // Model text with its equations typeset (math.js); the plain runs between them
@@ -53,7 +54,7 @@ function jumpable(node, target, onJump) {
 
 function bulletList(section, onJump, lines) {
   const list = el("ul", "outline-bullets");
-  for (const bullet of section.bullets) {
+  for (const [index, bullet] of section.bullets.entries()) {
     const item = el("li", "outline-bullet");
     // The model's text, with any LaTeX it wrote typeset rather than stripped
     // (2026-11-19); plain runs are normalised as before.
@@ -65,7 +66,10 @@ function bulletList(section, onJump, lines) {
     // paper, and to its heading when they cannot. The location is computed
     // here from the section's own text — never supplied by the model. See
     // locate.js for why that distinction is the whole point.
-    const located = lines ? locateBullet(bullet, lines) : null;
+    // The bullet's quote first — words the model copied from this section —
+    // then its own words, then the heading.
+    const quote = section.quotes?.[index];
+    const located = lines ? (quote && locateQuote(quote, lines)) || locateBullet(bullet, lines) : null;
     if (located) go.classList.add("is-located");
     jumpable(go, located ?? targetOf(section), onJump);
     item.append(go);

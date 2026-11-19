@@ -14,8 +14,11 @@ const BAND_POINTS = 26;
  * @param {number} [yEnd] the baseline of the last line to cover, for a bullet
  *   marking the sentences it restates rather than the heading above them
  * @param {number} [lineHeight] the matched text's own height, in PDF points
+ * @param {number} [x] left edge of the matched lines, at scale 1
+ * @param {number} [xEnd] right edge of the matched lines, at scale 1 — with x,
+ *   the band covers their column instead of the page's full width
  */
-export function flashAt(pageView, y, yEnd, lineHeight) {
+export function flashAt(pageView, y, yEnd, lineHeight, x, xEnd) {
   if (!pageView?.div || !pageView.viewport || typeof y !== "number") return;
 
   const scale = pageView.viewport.scale || 1;
@@ -41,6 +44,14 @@ export function flashAt(pageView, y, yEnd, lineHeight) {
   band.className = "jump-flash";
   band.style.top = `${bandTop}px`;
   band.style.height = `${height}px`;
+  // Viewport coordinates scale linearly with zoom, so the scale-1 extent the
+  // extraction recorded times the current scale is where the lines are now.
+  if (Number.isFinite(x) && Number.isFinite(xEnd) && xEnd > x) {
+    const pad = 4 * scale;
+    band.style.left = `${Math.max(0, x * scale - pad)}px`;
+    band.style.right = "auto";
+    band.style.width = `${(xEnd - x) * scale + 2 * pad}px`;
+  }
   const remove = () => band.remove();
   band.addEventListener("animationend", remove);
   // For the cases where the animation never fires at all — a backgrounded tab,

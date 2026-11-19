@@ -12,6 +12,12 @@ import { ProviderError } from "./errors.js";
 import { paperMessages, paperSchema } from "./paper-prompt.js";
 import { sendsPdf } from "./pdf.js";
 
+function alignedQuotes(section) {
+  const bullets = Array.isArray(section?.bullets) ? section.bullets.filter((b) => typeof b === "string" && b.trim()) : [];
+  const quotes = Array.isArray(section?.quotes) ? section.quotes : [];
+  return bullets.map((_, i) => (typeof quotes[i] === "string" ? quotes[i].trim() : ""));
+}
+
 const clean = (bullets) =>
   Array.isArray(bullets) ? bullets.filter((b) => typeof b === "string").map((b) => b.trim()).filter(Boolean) : [];
 
@@ -25,6 +31,9 @@ const finished = (placed, returned) =>
     page: section.page,
     y: section.y,
     bullets: clean(returned[i]?.bullets),
+    // One per bullet, kept index-aligned with them (a missing one is "") — the
+    // words the viewer looks for to place that bullet's jump.
+    quotes: alignedQuotes(returned[i]),
     ...(section.unplaced ? { unplaced: true } : {}),
   }));
 

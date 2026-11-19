@@ -10,7 +10,9 @@
 // 3 (2026-11-19): the PDF itself is sent to the providers that take one, and
 // headings are copied as printed.
 // 4 (2026-11-19): mathematics as LaTeX, typeset by the viewer (math.js).
-export const PROMPT_VERSION = 4;
+// 5 (2026-11-19): providers that choose their sections return a quote per
+// bullet, which the viewer finds to place the jump (viewer/locate-quote.js).
+export const PROMPT_VERSION = 5;
 
 export const MAX_BULLET_WORDS = 20;
 

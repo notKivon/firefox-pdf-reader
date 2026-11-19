@@ -4,6 +4,7 @@
 import { splitCitations } from "../model/chat-prompt.js";
 import { el } from "./el.js";
 import { repairTex, withMath } from "./math.js";
+import { locateQuote } from "./locate-quote.js";
 
 /**
  * A reply as paragraphs and "- " lists, with each [§ Title] that matches an
@@ -42,11 +43,14 @@ function inline(node, text, sections, onJump) {
       node.append(...withMath(repairTex(part.text), (run) => el("span", null, run)));
       continue;
     }
-    const { page, y } = sections[part.index];
+    const section = sections[part.index];
+    // A quoted citation goes to its sentence when the quote is in the section's
+    // own lines, and to the heading when it is not — never anywhere else.
+    const target = (part.quote && locateQuote(part.quote, section.lines)) || { page: section.page, y: section.y };
     const link = el("button", "chat-cite", `§ ${part.cite}`);
     link.type = "button";
-    link.title = `Go to “${part.cite}”, page ${page}`;
-    link.addEventListener("click", () => onJump?.({ page, y }));
+    link.title = part.quote ? `Go to “${part.quote}”, page ${target.page}` : `Go to “${part.cite}”, page ${target.page}`;
+    link.addEventListener("click", () => onJump?.(target));
     node.append(link);
   }
 }

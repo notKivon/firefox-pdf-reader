@@ -32,6 +32,7 @@ For each section, in order:
 - "heading": the section's printed heading, copied exactly as it appears, number included (for example "4.2. Accuracy of the voxelised density field"); for the title-and-abstract block, the paper's title. Copy it; do not correct, renumber or shorten it.
 - "title": a clean name for the section to display, for example "I. Introduction" or "Title and abstract".
 - "bullets": what the section says.
+- "quotes": one per bullet, in the same order — 6 to 15 consecutive words copied exactly from this section's own running text, from the sentence the bullet rests on most. Prose rather than an equation or a table cell where you can. The reader's screen uses it to find that sentence.
 
 ${STYLE[style === "guidelines" ? "guidelines" : "strict"]}
 
@@ -72,8 +73,8 @@ export function paperSchema(style = "strict") {
         maxItems: MAX_MODEL_SECTIONS,
         items: {
           type: "object",
-          properties: { heading: { type: "string" }, title: { type: "string" }, bullets },
-          required: ["heading", "title", "bullets"],
+          properties: { heading: { type: "string" }, title: { type: "string" }, bullets, quotes: { type: "array", items: { type: "string" } } },
+          required: ["heading", "title", "bullets", "quotes"],
           additionalProperties: false,
         },
       },

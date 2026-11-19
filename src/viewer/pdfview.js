@@ -12,6 +12,8 @@ const ZOOM_STEPS = [0.5, 0.67, 0.8, 0.9, 1, 1.1, 1.25, 1.5, 1.75, 2, 2.5, 3];
 
 // Air above a heading a jump lands on, in PDF points (~0.4in at 100%).
 const SCROLL_TOP_MARGIN = 30;
+// Room to the left of a located column, in PDF points.
+const SCROLL_SIDE_MARGIN = 12;
 
 export function createPdfView({ container, viewerEl, onPageChange, onScaleChange }) {
   const eventBus = new EventBus();
@@ -100,17 +102,25 @@ export function createPdfView({ container, viewerEl, onPageChange, onScaleChange
   // +y is up, so leaving air above the heading means scrolling to a larger y.
   // Near the top of a page that overshoots into the one before, which is what
   // `allowNegativeOffset` is for and is the right thing to show.
-  function scrollToSection({ page, y, yEnd, height }) {
+  function scrollToSection({ page, y, yEnd, height, x, xEnd }) {
     if (!pdfDocument) return;
     const pageNumber = Math.min(Math.max(page ?? 1, 1), pdfViewer.pagesCount);
     pdfViewer.scrollPageIntoView({
       pageNumber,
-      destArray: [null, { name: "XYZ" }, null, y === undefined || y === null ? null : y + SCROLL_TOP_MARGIN, null],
+      // x too, when the lines' column is known: zoomed in, the right column
+      // of a two-column page is otherwise off to the side.
+      destArray: [
+        null,
+        { name: "XYZ" },
+        Number.isFinite(x) ? Math.max(0, x - SCROLL_SIDE_MARGIN) : null,
+        y === undefined || y === null ? null : y + SCROLL_TOP_MARGIN,
+        null,
+      ],
       allowNegativeOffset: true,
     });
     // Landing somewhere down a dense page is otherwise indistinguishable from
     // not having moved at all.
-    flashAt(pdfViewer.getPageView(pageNumber - 1), y, yEnd, height);
+    flashAt(pdfViewer.getPageView(pageNumber - 1), y, yEnd, height, x, xEnd);
   }
 
   // Where a {page, y} target sits in the scroll container, for scroll-spy.

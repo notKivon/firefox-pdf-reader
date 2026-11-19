@@ -38,7 +38,9 @@ const isReferences = (title) => {
 export const lineRecords = (lines) =>
   lines
     .filter((line) => line.str.trim())
-    .map((line) => ({ page: line.page, y: line.pdfY, height: line.height, str: line.str }));
+    // x and right are the line's horizontal extent at scale 1, so a jump can
+    // light up only the column it lands in, not the full page width.
+    .map((line) => ({ page: line.page, y: line.pdfY, height: line.height, x: line.x, right: line.right, str: line.str }));
 
 /**
  * Sections run from one heading to the next. Extraction stops at the

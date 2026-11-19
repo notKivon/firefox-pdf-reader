@@ -255,6 +255,14 @@ The escape hatch above, taken — by Ollama rather than by Gemini, and for a dif
 - Used by `outline-list.js` (bullets — inside one `.outline-bullet-text` span, the row being a flex box — and the TL;DR) and `chat-render.js` (reply text between citations).
 - `PROMPT_VERSION` 4, `CHAT_PROMPT_VERSION` 3.
 
+## Better jumps (step 27)
+- Line records carry `x`, `right` (scale-1 viewport extent). `locate.js#spanTarget` returns `{page, y, yEnd, height, x, xEnd}`; `jump-flash.js` sizes the band to `x…xEnd` × scale; `pdfview.js` passes `x − 12` as the XYZ left.
+- `paper-prompt.js` schema: each section also has `quotes: string[]`, index-aligned with `bullets`; `model-sections.js#alignedQuotes` keeps the alignment. `outline-list.js`: `locateQuote(quote) || locateBullet(bullet)`, then the heading.
+- `viewer/locate-quote.js`: word stream with line indices, hyphen-joined; for each start on the quote's first or second word, the in-order match within quote length + 40%; most words wins, tightest span breaks ties; ≥ 4 words and ≥ 80% matched, else null.
+- `chat-prompt.js` `CITATION`: `[§ Title]` or `[§ Title | "quote"]`; `chat-render.js` places the quote in the section's lines.
+- `viewer/back-jump.js`: `remember()` (first of a run only, as a share of scroll height), `back()`, `dismiss()`; `#jump-back` in the PDF pane; Alt+← / Escape.
+- `PROMPT_VERSION` 5, `CHAT_PROMPT_VERSION` 4. `tools/paper-probe.mjs` reports quote/word/heading placement and takes `--out`.
+
 ## store/db.js
 IndexedDB `scholar-reader`, version 1:
 - `docs` — key `hash`; `{ hash, title, authors, doi, arxivId, pageCount, urls[], lastOpened, lastPage, scrollTop }`

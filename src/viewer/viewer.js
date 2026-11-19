@@ -14,6 +14,7 @@ import { createDebugPane } from "./debug-pane.js";
 import { createOutlinePane } from "./outline-pane.js";
 import { createChatPane } from "./chat-pane.js";
 import { initPaneTabs } from "./pane-tabs.js";
+import { createBackJump } from "./back-jump.js";
 import { trackReadingPosition } from "./reading-position.js";
 import { trackCurrentSection } from "./scroll-spy.js";
 import { captureToken, fromFile, fromUrl, nameOf, nextPickedFile, requestedUrl } from "./source.js";
@@ -188,11 +189,17 @@ async function main() {
     view,
     onChange: (index) => outlinePane?.setActive(index),
   });
-  const debugPane = createDebugPane({ root: els.debug, onJump: (target) => view.scrollToSection(target) });
-  const chatPane = createChatPane({ root: els.chat, onJump: (target) => view.scrollToSection(target) });
+  // Every jump remembers the reading spot first, so Back can return to it.
+  const backJump = createBackJump({ container: els.container, button: document.getElementById("jump-back") });
+  const jumpTo = (target) => {
+    backJump.remember();
+    view.scrollToSection(target);
+  };
+  const debugPane = createDebugPane({ root: els.debug, onJump: jumpTo });
+  const chatPane = createChatPane({ root: els.chat, onJump: jumpTo });
   outlinePane = createOutlinePane({
     root: els.outline,
-    onJump: (target) => view.scrollToSection(target),
+    onJump: jumpTo,
     onSections: (targets) => spy.setSections(targets),
     // Once an outline is up, chat cites and is sent the same sections it shows.
     onReady: (sections) => {
