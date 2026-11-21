@@ -69,7 +69,7 @@ await test("plan with no provider named uses the first of the reader's order", a
   assert.equal(detail.providerId, "gemini-dev");
   assert.deepEqual(
     detail.otherProviders.map((p) => p.id),
-    ["gemini-prod", "claude-opus", "ollama", "claude-sonnet", "claude-haiku", "gemini-4-argon", "gemini-4-carbon", "gemini-4-hydrogen"],
+    ["gemini-prod", "claude-opus", "ollama", "claude-sonnet", "claude-haiku", "gemini-4-argon", "gemini-4-carbon", "gemini-4-hydrogen", "gemini-4-neon"],
   );
   await setProviderOrder(DEFAULT_ORDER);
 });

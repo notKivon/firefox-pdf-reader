@@ -37,6 +37,9 @@ export const PROVIDERS = {
   "gemini-4-argon": gemini4("Gemini 4 Argon", "gemini-4-argon"),
   "gemini-4-carbon": gemini4("Gemini 4 Carbon", "gemini-4-carbon"),
   "gemini-4-hydrogen": gemini4("Gemini 4 Hydrogen", "gemini-4-hydrogen"),
+  // Added 2026-11-21 at the user's request, the same way: listed for their key,
+  // and a streamed structured-output call with the PDF attached read it right.
+  "gemini-4-neon": gemini4("Gemini 4 Neon", "gemini-4-neon"),
   ollama: {
     label: "Gemma 4 E4B (local)",
     baseUrl: "http://127.0.0.1:11434/v1/",

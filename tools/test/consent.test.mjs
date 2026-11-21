@@ -123,7 +123,7 @@ await test("the plan the card renders carries everything CLAUDE.md requires it t
   );
   const local = await plan({ hash, sections, meta, providerId: "ollama" });
   assert.equal(local.host, "127.0.0.1:11434");
-  assert.deepEqual(local.alternatives.map((a) => a.id), ["gemini-prod", "gemini-dev", "claude-opus", "claude-sonnet", "claude-haiku", "gemini-4-argon", "gemini-4-carbon", "gemini-4-hydrogen"]);
+  assert.deepEqual(local.alternatives.map((a) => a.id), ["gemini-prod", "gemini-dev", "claude-opus", "claude-sonnet", "claude-haiku", "gemini-4-argon", "gemini-4-carbon", "gemini-4-hydrogen", "gemini-4-neon"]);
 });
 
 console.log(results.join("\n"));
