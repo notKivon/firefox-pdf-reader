@@ -16,11 +16,15 @@ import { decodeJson, networkError, originRefusedError } from "./wire.js";
  * @param {object[]} args.messages chat messages
  * @param {object} args.schema JSON schema the response must match
  * @param {(sections: object[]) => void} [args.onPartial] complete sections so far
- * @param {() => void} [args.onAlive] any line arrived, keep-alives included
+ * @param {() => void} [args.onAlive] the run showed life: any line but the
+ *   bridge's own `: keep-alive`, which says the bridge is up, not that the run is
+ * @param {(stage: string) => void} [args.onStage] "reading", "thinking" or
+ *   "writing": from the bridge as it changes; from any provider, "writing" at
+ *   the first token
  * @param {AbortSignal} [args.signal]
  * @returns {Promise<{data: object, usage: object|null, text: string}>}
  */
-export async function chatJson({ providerId, provider, apiKey, messages, schema, onPartial, onAlive, signal }) {
+export async function chatJson({ providerId, provider, apiKey, messages, schema, onPartial, onAlive, onStage, signal }) {
   const response = await post({
     providerId,
     provider,
@@ -29,7 +33,7 @@ export async function chatJson({ providerId, provider, apiKey, messages, schema,
     extra: { response_format: { type: "json_schema", json_schema: { name: "outline", strict: true, schema } } },
     messages,
   });
-  const { content, usage } = await readStream(response, { onPartial, onAlive, providerId, provider });
+  const { content, usage } = await readStream(response, { onPartial, onAlive, onStage, providerId, provider });
   return { data: decodeJson(content, providerId), usage, text: content };
 }
 
@@ -95,13 +99,19 @@ async function post({ providerId, provider, apiKey, signal, extra, messages }) {
 // Two extensions, both sent only by the Claude bridge (tools/bridge/server.mjs):
 // `final_content` replaces what was streamed when the model started its answer
 // over, and `error` is a failure after the 200 was already committed.
-async function readStream(response, { onPartial, onText, onAlive, providerId, provider }) {
+async function readStream(response, { onPartial, onText, onAlive, onStage, providerId, provider }) {
   const reader = response.body.getReader();
   const decoder = new TextDecoder();
   let buffer = "";
   let content = "";
   let usage = null;
   let emitted = 0;
+  let stage = null;
+  const setStage = (next) => {
+    if (next === stage) return;
+    stage = next;
+    onStage?.(next);
+  };
 
   try {
     for (;;) {
@@ -113,7 +123,9 @@ async function readStream(response, { onPartial, onText, onAlive, providerId, pr
       while ((split = buffer.indexOf("\n")) !== -1) {
         const line = buffer.slice(0, split).trim();
         buffer = buffer.slice(split + 1);
-        if (line) onAlive?.();
+        // A stuck `claude -p` behind a healthy bridge still gets this one, so it
+        // is not life: counting it let a hung run spin forever (2026-11-21).
+        if (line && line !== ": keep-alive") onAlive?.();
         if (!line.startsWith("data:")) continue;
         const payload = line.slice(5).trim();
         if (payload === "[DONE]") continue;
@@ -132,8 +144,10 @@ async function readStream(response, { onPartial, onText, onAlive, providerId, pr
           onText?.(content);
         }
         if (chunk.usage) usage = chunk.usage;
+        if (typeof chunk.stage === "string") setStage(chunk.stage);
         const delta = chunk.choices?.[0]?.delta?.content;
         if (typeof delta === "string" && delta) {
+          setStage("writing");
           content += delta;
           onText?.(content);
           if (onPartial) {

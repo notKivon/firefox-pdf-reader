@@ -10,8 +10,10 @@ import { describeFailure } from "./diagnostics.js";
 import { el } from "./el.js";
 import { errorBox } from "./pane-error.js";
 import { outlineList } from "./outline-list.js";
+import { outlineProgress } from "./outline-progress.js";
 import { readyBox } from "./outline-ready.js";
 import { paperForSending, pdfInfoOf, resolvedSections } from "./outline-sections.js";
+import { shortName } from "./provider-switch.js";
 
 // Sections carry their body lines so a bullet can be located against the paper
 // (locate.js). Those lines never leave this page: the router builds the model
@@ -31,10 +33,13 @@ export function createOutlinePane({ root, onJump, onSections, onReady }) {
   let current = null; // {hash, sections, meta, providerId, label}
   let granted = null; // the cache key this page last had the router record
   let list = null; // the rendered outline, while one is on screen
+  let live = null; // {progress, host} while a run is in flight
 
   // Every state change drops the outline, so the spy is told before anything can
   // ask it to highlight a section that is no longer rendered.
   const show = (...nodes) => {
+    live?.progress.dispose();
+    live = null;
     list = null;
     onSections?.([]);
     root.replaceChildren(...nodes);
@@ -46,8 +51,8 @@ export function createOutlinePane({ root, onJump, onSections, onReady }) {
 
   // Every failure state, including the ones the reader can be stranded in: see
   // pane-error.js for why the alternatives travel with them.
-  function showError(text, { retry, plan, details } = {}) {
-    show(errorBox(text, { retry, plan, details, onPickProvider: (id) => replan(id).catch(reportFailure) }));
+  function showError(text, { retry, plan, details, retryLabel, calm } = {}) {
+    show(errorBox(text, { retry, plan, details, retryLabel, calm, onPickProvider: (id) => replan(id).catch(reportFailure) }));
   }
 
   // The finished outline, fresh or cached: see outline-ready.js.
@@ -117,10 +122,20 @@ export function createOutlinePane({ root, onJump, onSections, onReady }) {
   }
 
   async function send(detail) {
-    // Kept for the progress line, which replaces this message as soon as the
-    // first section lands and should still say who is writing it.
     current = { ...current, label: detail.label };
-    showMessage(`Generating outline with ${detail.label}…`);
+    // The run's own state, live: stage, time, silence, and Stop. Sections fill
+    // in beneath it as they land (progress below).
+    const hash = current.hash;
+    const progress = outlineProgress({
+      label: shortName(detail.label),
+      pdf: Boolean(detail.pdf),
+      onStop: () => browser.runtime.sendMessage({ type: "outline-stop", hash }).catch(reportFailure),
+    });
+    const host = el("div", "outline-live-list");
+    const box = el("div", "outline-live");
+    box.append(progress.node, host);
+    show(box);
+    live = { progress, host };
     const result = await browser.runtime.sendMessage({
       type: "outline",
       hash: current.hash,
@@ -150,6 +165,15 @@ export function createOutlinePane({ root, onJump, onSections, onReady }) {
         }),
       );
     }
+    // The reader's own Stop: not a failure, and nothing to diagnose.
+    if (result?.error === "cancelled") {
+      return showError(result.message ?? "Stopped.", {
+        retry: () => send(detail).catch(reportFailure),
+        retryLabel: "Generate outline",
+        plan: detail,
+        calm: true,
+      });
+    }
     if (result?.error) {
       return showError(result.message ?? "The outline could not be generated.", {
         retry: () => send(detail).catch(reportFailure),
@@ -170,19 +194,15 @@ export function createOutlinePane({ root, onJump, onSections, onReady }) {
       .catch(() => {});
   }
 
-  // Progressive fill, under either strategy: the sections that have landed are
-  // rendered and clickable straight away, with the rest still to come. The
-  // router also sends a bare `{providerId}` when fallback moves the run, which
-  // carries no sections and is not a render.
+  // The run's news, under either strategy: a stage, a sign of life, or the
+  // sections that have landed — rendered and clickable straight away, with the
+  // rest still to come. A bare `{providerId}` (fallback moved the run) is life.
   function progress(partial) {
-    if (partial.hash !== current?.hash || !partial.sections?.length) return;
+    if (partial.hash !== current?.hash || !live) return;
+    live.progress.update(partial);
+    if (!partial.sections?.length) return;
     const rendered = outlineList({ sections: partial.sections }, { onJump, partial: true });
-    const box = el("div", "outline-live");
-    box.append(
-      el("p", "pane-placeholder", `Generating outline with ${current.label ?? "the model"}…`),
-      rendered.node,
-    );
-    show(box);
+    live.host.replaceChildren(rendered.node);
     list = rendered;
     onSections?.(rendered.targets);
   }

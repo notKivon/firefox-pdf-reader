@@ -22,6 +22,12 @@ process.stdin.on("end", () => {
   }
   say({ type: "system", subtype: "init" });
 
+  // Says nothing more and never exits: the bridge's stall timer must end it.
+  if (mode === "hang") {
+    setInterval(() => {}, 60_000);
+    return;
+  }
+
   if (mode === "limit") {
     say({ type: "rate_limit_event", rate_limit_info: { status: "rejected", resetsAt: Math.round(Date.now() / 1000) + 3600 } });
     say({ type: "result", is_error: true, api_error_status: 429, result: "You've hit your usage limit." });
@@ -50,6 +56,11 @@ process.stdin.on("end", () => {
     event({ type: "content_block_delta", index, delta: { type: "input_json_delta", partial_json: text.slice(half) } });
     event({ type: "content_block_stop", index });
   };
+  if (mode === "think") {
+    event({ type: "content_block_start", index: 0, content_block: { type: "thinking", thinking: "" } });
+    event({ type: "content_block_delta", index: 0, delta: { type: "thinking_delta", thinking: "Hmm." } });
+    event({ type: "content_block_stop", index: 0 });
+  }
   if (mode === "retry") block(1, '{"sections":[{"title":"wrong"');
   block(mode === "retry" ? 2 : 1, answer);
   say({

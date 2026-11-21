@@ -19,6 +19,7 @@ export const STALL_MS = 180_000;
 export function createWatchdog({ ms = STALL_MS, setTimer = setTimeout, clearTimer = clearTimeout } = {}) {
   const controller = new AbortController();
   let fired = false;
+  let cancelled = false;
   let timer = null;
 
   const arm = () => {
@@ -34,14 +35,24 @@ export function createWatchdog({ ms = STALL_MS, setTimer = setTimeout, clearTime
     signal: controller.signal,
     /** Something arrived; the run is alive. */
     poke() {
-      if (!fired) arm();
+      if (!fired && !cancelled) arm();
     },
     stop() {
       if (timer !== null) clearTimer(timer);
       timer = null;
     },
+    /** The reader pressed Stop: abort now, and say so rather than "stalled". */
+    cancel() {
+      if (fired || cancelled) return;
+      cancelled = true;
+      this.stop();
+      controller.abort();
+    },
     get fired() {
       return fired;
+    },
+    get cancelled() {
+      return cancelled;
     },
     ms,
   };

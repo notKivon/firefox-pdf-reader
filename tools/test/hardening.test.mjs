@@ -32,7 +32,7 @@ const { normalizeOrder, normalizeHosts, DEFAULT_ORDER, setProviderOrder } = awai
 const { fallbacksFor } = await import("../../src/model/providers.js");
 const { createBypass, BYPASS_TTL_MS } = await import("../../src/background/bypass.js");
 const { createWatchdog } = await import("../../src/background/watchdog.js");
-const { plan, runOutline } = await import("../../src/background/router.js");
+const { plan, runOutline, stopOutline } = await import("../../src/background/router.js");
 const { registerInterceptor } = await import("../../src/background/intercept.js");
 const { grantConsent } = await import("../../src/store/consent.js");
 const { fromFile, requestedUrl, isWebUrl, MAX_LOCAL_BYTES } = await import("../../src/viewer/source.js");
@@ -151,6 +151,45 @@ await test("a provider that accepts and never answers ends in a readable stall e
     assert.match(err.message, /stopped responding.*nothing was cached/);
     return true;
   });
+});
+
+await test("Stop aborts the run in flight and says so, rather than calling it a stall", async () => {
+  const hash = "e".repeat(64);
+  const { sections } = JSON.parse(readFileSync(new URL("../../fixtures/adam.json", import.meta.url), "utf8"));
+  const detail = await plan({ hash, sections, providerId: "gemini-prod" });
+  await grantConsent({ cacheKey: detail.cacheKey, hash, providerId: "gemini-prod", model: detail.model, destination: "google" });
+  let aborted = false;
+  globalThis.fetch = (_url, init) => new Promise((_, reject) => {
+    init.signal?.addEventListener("abort", () => { aborted = true; reject(new DOMException("aborted", "AbortError")); });
+  });
+  const run = runOutline({ hash, sections, providerId: "gemini-prod" }, undefined);
+  await tick(); await tick();
+  assert.deepEqual(stopOutline(hash), { stopped: true });
+  await assert.rejects(run, (err) => {
+    assert.equal(err.kind, "cancelled");
+    assert.match(err.message, /Stopped\. Nothing was cached\./);
+    return true;
+  });
+  assert.ok(aborted, "the fetch itself was aborted, which is what ends the bridge's child");
+  assert.deepEqual(stopOutline(hash), { stopped: false }, "a finished run is not an error to stop");
+});
+
+await test("the bridge's own keep-alive is not a sign of life; a run's own output is", async () => {
+  const { chatJson } = await import("../../src/model/openai-compat.js");
+  const { PROVIDERS } = await import("../../src/model/providers.js");
+  const body = ": keep-alive\n\n: keep-alive\n\n" +
+    'data: {"stage":"thinking","choices":[]}\n\n: alive\n\n' +
+    'data: {"choices":[{"index":0,"delta":{"content":"{\\"sections\\":[],\\"tldr\\":\\"x\\"}"}}]}\n\ndata: [DONE]\n\n';
+  globalThis.fetch = async () => new Response(body, { status: 200 });
+  let alive = 0;
+  const stages = [];
+  await chatJson({
+    providerId: "claude-opus", provider: PROVIDERS["claude-opus"], apiKey: "srb_x",
+    messages: [{ role: "user", content: "x" }], schema: { type: "object" },
+    onAlive: () => alive++, onStage: (s) => stages.push(s),
+  });
+  assert.equal(alive, 4, "the stage line, `: alive`, the delta and [DONE] — never `: keep-alive`");
+  assert.deepEqual(stages, ["thinking", "writing"]);
 });
 
 await test("a local file over the size cap, or none at all, fails in words", async () => {

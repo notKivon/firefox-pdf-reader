@@ -45,6 +45,11 @@ export class BridgeError extends Error {
 
 const emptyDir = mkdtempSync(join(tmpdir(), "scholar-bridge-"));
 
+// A run with no output from Claude Code for this long is stopped. Shorter than
+// the extension's own watchdog (background/watchdog.js, 3 minutes), so a stuck
+// CLI ends here with words the pane can show rather than as a dropped stream.
+export const STALL_MS = 150_000;
+
 /**
  * @param {object} args
  * @param {string} args.model one of MODELS
@@ -57,9 +62,12 @@ const emptyDir = mkdtempSync(join(tmpdir(), "scholar-bridge-"));
  * @param {(text: string) => void} args.onDelta a slice of the JSON, or of the text
  * @param {() => void} args.onReset the model started its answer over
  * @param {() => void} args.onAlive any sign the run is still working
+ * @param {(stage: "reading"|"thinking"|"writing") => void} [args.onStage] what
+ *   the run is doing now, said once per change
+ * @param {number} [args.stallMs] how long without output before the run is stopped
  * @returns {Promise<{structured?: object, text?: string, usage: object}>}
  */
-export function runClaude({ model, system, user, schema, documents = [], signal, onDelta, onReset, onAlive }) {
+export function runClaude({ model, system, user, schema, documents = [], signal, onDelta, onReset, onAlive, onStage = () => {}, stallMs = STALL_MS }) {
   const args = [
     "-p",
     "--model", model,
@@ -88,7 +96,28 @@ export function runClaude({ model, system, user, schema, documents = [], signal,
     stderr = (stderr + chunk).slice(-2000);
   });
 
-  const state = { text: !schema, outputIndex: null, outputs: 0, rejectedUntil: null, result: null };
+  const state = { text: !schema, outputIndex: null, outputs: 0, rejectedUntil: null, result: null, stage: null };
+  const stage = (next) => {
+    if (state.stage === next) return;
+    state.stage = next;
+    onStage(next);
+  };
+  stage("reading");
+
+  // Only Claude Code's own output counts as life. The HTTP side has a
+  // keep-alive of its own, which says the bridge is up, not that the run is.
+  let stalled = false;
+  let quiet = null;
+  const rearm = () => {
+    clearTimeout(quiet);
+    quiet = setTimeout(() => {
+      stalled = true;
+      kill();
+    }, stallMs);
+  };
+  rearm();
+  const hooks = { onDelta, onReset, onAlive: () => { rearm(); onAlive(); }, stage };
+
   let buffer = "";
   child.stdout.on("data", (chunk) => {
     buffer += chunk;
@@ -96,7 +125,7 @@ export function runClaude({ model, system, user, schema, documents = [], signal,
     while ((split = buffer.indexOf("\n")) !== -1) {
       const line = buffer.slice(0, split).trim();
       buffer = buffer.slice(split + 1);
-      if (line) handleLine(line, state, { onDelta, onReset, onAlive });
+      if (line) handleLine(line, state, hooks);
     }
   });
 
@@ -105,9 +134,17 @@ export function runClaude({ model, system, user, schema, documents = [], signal,
       reject(new BridgeError(`Could not start Claude Code (${claudeBin()}): ${err.message}`));
     });
     child.on("close", (code) => {
+      clearTimeout(quiet);
       signal?.removeEventListener("abort", kill);
-      if (buffer.trim()) handleLine(buffer.trim(), state, { onDelta, onReset, onAlive });
+      if (buffer.trim()) handleLine(buffer.trim(), state, hooks);
       if (signal?.aborted) return reject(new BridgeError("cancelled", { status: 499 }));
+      if (stalled) {
+        const seconds = Math.round(stallMs / 1000);
+        return reject(new BridgeError(
+          `Claude Code went quiet — no output for ${seconds} s — so the bridge stopped the run. Nothing was cached; trying again usually works.`,
+          { status: 504 },
+        ));
+      }
       try {
         resolve(finish(state, code, stderr));
       } catch (err) {
@@ -125,7 +162,7 @@ function streamInput(documents, text) {
   return `${JSON.stringify({ type: "user", message: { role: "user", content } })}\n`;
 }
 
-function handleLine(line, state, { onDelta, onReset, onAlive }) {
+function handleLine(line, state, { onDelta, onReset, onAlive, stage }) {
   let msg;
   try {
     msg = JSON.parse(line);
@@ -141,7 +178,9 @@ function handleLine(line, state, { onDelta, onReset, onAlive }) {
   } else if (msg.type === "stream_event") {
     const event = msg.event ?? {};
     const wanted = state.text ? event.content_block?.type === "text" : event.content_block?.name === "StructuredOutput";
+    if (event.type === "content_block_start" && event.content_block?.type === "thinking") stage("thinking");
     if (event.type === "content_block_start" && wanted) {
+      stage("writing");
       state.outputIndex = event.index;
       // A second structured answer replaces the first; a second text block
       // (after a think, say) continues the reply.

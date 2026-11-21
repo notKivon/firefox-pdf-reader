@@ -21,6 +21,19 @@ import { createWatchdog } from "./watchdog.js";
 export { plan };
 
 const PROGRESS_MESSAGE = "outline-progress";
+// How often, at most, the pane is told the run is still alive — enough for its
+// "no activity for N s" line, without a message per streamed token.
+const ALIVE_EVERY_MS = 5_000;
+
+// Runs in flight, by document hash, so Stop can reach the one the pane shows.
+const running = new Map();
+
+/** The reader's Stop. A run that already ended is not an error. */
+export function stopOutline(hash) {
+  const dog = running.get(hash);
+  dog?.cancel?.();
+  return { stopped: Boolean(dog) };
+}
 
 /**
  * @param {{hash, sections, meta, providerId}} request
@@ -51,6 +64,16 @@ export async function runOutline(request, tabId, { watchdog } = {}) {
   };
 
   const dog = watchdog ?? createWatchdog();
+  running.get(request.hash)?.cancel?.(); // a second run for one paper replaces the first
+  running.set(request.hash, dog);
+  let lastAliveTold = 0;
+  const alive = () => {
+    dog.poke();
+    const now = Date.now();
+    if (now - lastAliveTold < ALIVE_EVERY_MS) return;
+    lastAliveTold = now;
+    tell({ alive: true });
+  };
   let result;
   try {
     result = await generateOutline({
@@ -66,17 +89,25 @@ export async function runOutline(request, tabId, { watchdog } = {}) {
         dog.poke();
         tell(partial);
       },
-      onAlive: () => dog.poke(),
+      onAlive: alive,
+      onStage: (stage) => {
+        dog.poke();
+        tell({ stage });
+      },
       onProviderChange: (id) => {
         dog.poke();
         tell({ providerId: id });
       },
     });
   } catch (err) {
+    if (dog.cancelled) {
+      throw new ProviderError("Stopped. Nothing was cached.", { kind: "cancelled", providerId: detail.providerId, cause: err });
+    }
     if (dog.fired) throw stalled(detail, dog.ms, err);
     throw err;
   } finally {
     dog.stop();
+    if (running.get(request.hash) === dog) running.delete(request.hash);
   }
 
   return { ...result, ...(await cache(request.hash, result)) };
@@ -125,6 +156,9 @@ function handlers({ bypass }) {
     ...chatHandlers(),
     plan: (message) => plan(message),
     outline: (message, sender) => runOutline(message, sender.tab?.id),
+    // Aborts the fetch, which closes the bridge's stream, which kills the
+    // `claude -p` child (bridge/server.mjs) — nothing keeps running unseen.
+    "outline-stop": async (message) => stopOutline(message.hash),
     // Read-only: what today's counters stand at, for the settings page.
     quota: async () => ({
       providers: await Promise.all(

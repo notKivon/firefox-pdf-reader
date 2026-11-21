@@ -20,11 +20,14 @@ import { modelChoice } from "./provider-switch.js";
  * @param {(id: string) => void} [options.onPickProvider]
  * @param {string} [options.details] plain text behind a "Details" disclosure —
  *   what the reader can copy when the message alone does not explain it
+ * @param {string} [options.retryLabel] the retry button's words; "Try again"
+ * @param {boolean} [options.calm] not a failure (the reader pressed Stop), so
+ *   not in the error colour
  * @returns {HTMLElement}
  */
-export function errorBox(text, { retry, plan, onPickProvider, details } = {}) {
+export function errorBox(text, { retry, plan, onPickProvider, details, retryLabel = "Try again", calm = false } = {}) {
   const box = el("div", "outline-error");
-  box.append(el("p", "pane-error", text));
+  box.append(el("p", calm ? "pane-placeholder" : "pane-error", text));
   if (details) {
     const more = el("details", "pane-error-details");
     more.append(el("summary", null, "Details"), el("pre", "pane-error-text", details));
@@ -32,7 +35,7 @@ export function errorBox(text, { retry, plan, onPickProvider, details } = {}) {
   }
 
   if (retry) {
-    const button = el("button", "confirm-go", "Try again");
+    const button = el("button", "confirm-go", retryLabel);
     button.type = "button";
     button.addEventListener("click", retry);
     box.append(button);

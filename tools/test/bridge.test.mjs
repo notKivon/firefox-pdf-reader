@@ -180,6 +180,34 @@ await test("a PDF reaches Claude Code as a document block, never as text", async
   assert.doesNotMatch(message.message.content[1].text, /base64/, "the bytes are not pasted into the prompt");
 });
 
+await test("the run's stages reach the extension, once per change", async () => {
+  process.env.FAKE_CLAUDE_MODE = "think";
+  const stages = [];
+  const result = await ask({ onStage: (s) => stages.push(s) });
+  assert.deepEqual(result.data, answer);
+  // "reading" is held with the headers (HOLD_MS) and this run is past it by
+  // then; a slow one opens the stream still reading and says so.
+  assert.deepEqual(stages, ["thinking", "writing"]);
+});
+
+await test("a Claude Code that goes quiet is stopped by the bridge, in words", async () => {
+  const quiet = createBridge({ token, log: () => {}, stallMs: 300 });
+  await new Promise((resolve) => quiet.listen(0, "127.0.0.1", resolve));
+  process.env.FAKE_CLAUDE_MODE = "hang";
+  const hung = { ...provider, baseUrl: `http://127.0.0.1:${quiet.address().port}/v1/` };
+  const started = Date.now();
+  await assert.rejects(
+    chatJson({ providerId: "claude-opus", provider: hung, apiKey: token, messages, schema: outlineSchema(1) }),
+    (err) => {
+      assert.equal(err.status, 504);
+      assert.match(err.message, /went quiet.*stopped the run/);
+      return true;
+    },
+  );
+  assert.ok(Date.now() - started < 5_000, "ended by the stall timer, not by anything slower");
+  quiet.close();
+});
+
 server.close();
 globalThis.fetch = realFetch;
 console.log(results.join("\n"));

@@ -16,7 +16,7 @@ const MAX_BODY = 48 * 1024 * 1024;
 const HOLD_MS = 8_000;
 const KEEPALIVE_MS = 15_000;
 
-export function createBridge({ token, log = console.log }) {
+export function createBridge({ token, log = console.log, stallMs }) {
   const expected = Buffer.from(`Bearer ${token}`);
 
   return createServer(async (req, res) => {
@@ -31,7 +31,7 @@ export function createBridge({ token, log = console.log }) {
       }
       const request = parseRequest(await readBody(req));
       log(`[bridge] ${request.model}: ${request.user.length.toLocaleString("en")} chars`);
-      await serve(req, res, request, log);
+      await serve(req, res, { ...request, stallMs }, log);
     } catch (err) {
       if (err instanceof BridgeError) return fail(res, err.status, err.message);
       log("[bridge] unexpected", err);
@@ -101,15 +101,19 @@ async function serve(req, res, request, log) {
   let committed = false;
   let streamed = "";
   let keepalive = null;
+  let stage = null; // the latest, held until the headers go out
+  const send = (obj) => res.write(`data: ${JSON.stringify(obj)}\n\n`);
   const commit = () => {
     if (committed) return;
     committed = true;
     clearTimeout(hold);
     res.writeHead(200, { "Content-Type": "text/event-stream", "Cache-Control": "no-cache" });
+    // Says the bridge is up, and nothing about the run: the extension does not
+    // count it as life (openai-compat.js). `: alive` below is the run's own.
     keepalive = setInterval(() => res.write(": keep-alive\n\n"), KEEPALIVE_MS);
+    if (stage) send({ stage, choices: [] });
   };
   const hold = setTimeout(commit, HOLD_MS);
-  const send = (obj) => res.write(`data: ${JSON.stringify(obj)}\n\n`);
   const delta = (content) => send({ choices: [{ index: 0, delta: { content } }] });
 
   const started = Date.now();
@@ -127,6 +131,15 @@ async function serve(req, res, request, log) {
       onReset: () => {},
       onAlive: () => {
         if (committed) res.write(": alive\n\n");
+      },
+      // What the run is doing, for the pane's progress line and this log.
+      onStage: (next) => {
+        stage = next;
+        log(`[bridge] ${request.model}: ${next} (${Math.round((Date.now() - started) / 1000)} s)`);
+        // Thinking means the model is under way, past the failures the held
+        // headers are for, so the stream opens (sending the stage) right away.
+        if (committed) send({ stage: next, choices: [] });
+        else if (next !== "reading") commit();
       },
     });
     commit();
