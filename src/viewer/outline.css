@@ -2,50 +2,90 @@
    the outline itself. Split out of theme.css, which holds the tokens and the
    window chrome. */
 
-/* --- Send confirmation card (step 8) --- */
+/* --- Send confirmation card --- */
 
+/* One question, one fact, one action (2026-11-21). The question carries the
+   weight; the model inside it is the one choice; the fact is quiet; the button
+   is the only filled thing on the card. */
 .confirm-card {
   display: flex;
   flex-direction: column;
-  gap: 9px;
+  gap: 4px;
   margin: 0 0 16px;
-  padding: 14px 14px 16px;
+  padding: 16px 16px 14px;
   border: 1px solid var(--border);
-  border-radius: 10px;
+  border-radius: 12px;
   background: var(--bg-raised);
 }
 
-.confirm-heading {
+.confirm-ask {
   margin: 0;
-  font-size: 14px;
+  font-size: 16px;
   font-weight: 600;
+  line-height: 1.35;
+  letter-spacing: -0.01em;
   color: var(--text);
 }
 
-.confirm-doc {
-  margin: 0;
-  font-weight: 600;
-  word-break: break-word;
+/* The model is read as part of the sentence and changed in place: accent
+   colour, a soft underline and a caret drawn in the text's own colour. The
+   real select sits invisibly over the name (confirm-card.js). */
+.confirm-model {
+  position: relative;
+  display: inline-block;
+  white-space: nowrap;
+  color: var(--accent);
 }
 
-.confirm-meta,
-.confirm-cost {
+.confirm-model-name {
+  padding: 0 15px 1px 0;
+  border-bottom: 1.5px solid color-mix(in srgb, var(--accent) 40%, transparent);
+  background:
+    linear-gradient(45deg, transparent 50%, currentColor 50%) right 5px top 55% / 5px 5px no-repeat,
+    linear-gradient(135deg, currentColor 50%, transparent 50%) right 0 top 55% / 5px 5px no-repeat;
+}
+
+.confirm-model:hover .confirm-model-name {
+  border-bottom-color: var(--accent);
+}
+
+.confirm-model-select {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  opacity: 0;
+  font: inherit;
+  cursor: pointer;
+}
+
+.confirm-model:focus-within {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
+  border-radius: 3px;
+}
+
+.confirm-model-select option,
+.confirm-model-select optgroup {
+  background: var(--bg-raised);
+  color: var(--text);
+}
+
+.confirm-fact {
   margin: 0;
+  font-size: 13px;
+  line-height: 1.45;
   color: var(--text-dim);
 }
 
-/* Where the text goes is the question the card exists to answer, so it is the
-   one line that is not dimmed. */
-.confirm-dest {
-  margin: 0;
-  padding: 6px 8px;
-  border-left: 3px solid var(--accent);
-  border-radius: 0 4px 4px 0;
-  background: var(--bg-sunken);
+.confirm-card .confirm-go {
+  margin-top: 12px;
+  padding: 9px 14px;
+  border-radius: 8px;
 }
 
-.confirm-dest.is-local {
-  border-left-color: var(--text-dim);
+.confirm-card .confirm-what {
+  margin-top: 6px;
+  font-size: 12.5px;
 }
 
 .confirm-what > summary {

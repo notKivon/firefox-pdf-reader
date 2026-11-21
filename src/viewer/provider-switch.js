@@ -27,35 +27,51 @@ const GROUPS = [
 export function modelPicker(options, { label, onPick, className = "outline-switch" }) {
   if (!options?.length) return null;
   const box = el("div", className);
-  const select = el("select", "model-picker");
+  box.append(el("span", "outline-switch-label", label), modelSelect(options, { label, onPick, className: "model-picker" }));
+  return box;
+}
+
+/**
+ * The dropdown itself, grouped by destination. With `selectedId`, that model
+ * is shown as chosen; without, a "Choose a model…" prompt is.
+ *
+ * @param {{id: string, label: string, destination: string}[]} options
+ * @param {{label: string, onPick: (id: string) => void, selectedId?: string, className?: string}} args
+ */
+export function modelSelect(options, { label, onPick, selectedId, className = "model-picker" }) {
+  const select = el("select", className);
   select.setAttribute("aria-label", label);
-
-  const prompt = el("option", null, "Choose a model…");
-  prompt.value = "";
-  prompt.disabled = true;
-  prompt.selected = true;
-  select.append(prompt);
-
+  if (!selectedId) {
+    const prompt = el("option", null, "Choose a model…");
+    prompt.value = "";
+    prompt.disabled = true;
+    prompt.selected = true;
+    select.append(prompt);
+  }
   const known = new Set(GROUPS.map(([destination]) => destination));
-  for (const [destination, name] of [...GROUPS, ...[...new Set(options.map((o) => o.destination))].filter((d) => !known.has(d)).map((d) => [d, d])]) {
+  const extra = [...new Set(options.map((o) => o.destination))].filter((d) => !known.has(d)).map((d) => [d, d]);
+  for (const [destination, name] of [...GROUPS, ...extra]) {
     const members = options.filter((option) => option.destination === destination);
     if (!members.length) continue;
     const group = el("optgroup");
     group.label = name;
     for (const { id, label: text } of members) {
-      const option = el("option", null, text.replace(/\s*\(via Claude Code\)$/, ""));
+      const option = el("option", null, shortName(text));
       option.value = id;
+      option.selected = id === selectedId;
       group.append(option);
     }
     select.append(group);
   }
-
   select.addEventListener("change", () => {
-    if (select.value) onPick(select.value);
+    if (select.value && select.value !== selectedId) onPick(select.value);
   });
-  box.append(el("span", "outline-switch-label", label), select);
-  return box;
+  return select;
 }
+
+// The reader knows the Claude models run through Claude Code; the label need
+// not say so every time.
+export const shortName = (label) => String(label ?? "").replace(/\s*\(via Claude Code\)$/, "");
 
 /**
  * Under a finished outline: every other model, this one's destination included.
