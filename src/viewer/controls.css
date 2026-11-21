@@ -9,10 +9,11 @@
   padding: 0 6px;
   background: var(--bg-sunken);
   color: var(--text);
+  /* One even edge all round (2026-11-21, at the user's request: the lighter
+     bottom edge and inner shadow read as a stray highlight). The sunken fill
+     alone says "field". */
   border: 1px solid var(--border);
-  border-bottom-color: var(--text-dim);
   border-radius: 4px;
-  box-shadow: inset 0 1px 3px var(--shadow);
   font: inherit;
   font-variant-numeric: tabular-nums;
   text-align: center;
@@ -26,9 +27,7 @@
 .toolbar-field:focus {
   outline: none;
   border-color: var(--accent);
-  box-shadow:
-    inset 0 1px 3px var(--shadow),
-    0 0 0 2px color-mix(in srgb, var(--accent) 35%, transparent);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 35%, transparent);
 }
 
 /* Lit while the zoom is following the pane's width. */
