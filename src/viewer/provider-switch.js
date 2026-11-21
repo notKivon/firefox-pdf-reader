@@ -74,10 +74,29 @@ export function modelSelect(options, { label, onPick, selectedId, className = "m
 export const shortName = (label) => String(label ?? "").replace(/\s*\(via Claude Code\)$/, "");
 
 /**
- * Under a finished outline: every other model, this one's destination included.
- * @param {object} plan the router's `plan` response for the model in use
- * @param {(providerId: string) => void} onPick
+ * The one model control (2026-11-21, at the user's request: one dropdown with
+ * every model in it, everywhere). "[lead] [model ▾]": the current model's name
+ * as text, with the real select laid invisibly over it — a native select is as
+ * wide as its longest option, which pushed the name onto a line of its own.
+ * Same clicks, same keyboard, same screen-reader control.
+ *
+ * @param {object} plan the router's plan: providerId, label, destination, otherProviders
+ * @param {{lead: string, onPick: (id: string) => void, className?: string}} args
+ * @returns {HTMLElement}
  */
-export function providerSwitch(plan, onPick) {
-  return modelPicker(plan?.otherProviders, { label: "Outline this paper with:", onPick });
+export function modelChoice(plan, { lead, onPick, className = "model-line" }) {
+  const line = el("p", className);
+  const current = { id: plan.providerId, label: plan.label, destination: plan.destination };
+  const options = [current, ...(plan.otherProviders ?? [])];
+  if (options.length < 2 || !plan.providerId) {
+    line.append(el("span", null, `${lead} ${shortName(plan.label)}`));
+    return line;
+  }
+  const choice = el("span", "model-choice");
+  choice.append(
+    el("span", "model-choice-name", shortName(plan.label)),
+    modelSelect(options, { label: "Model", onPick, selectedId: plan.providerId, className: "model-choice-select" }),
+  );
+  line.append(el("span", null, `${lead} `), choice);
+  return line;
 }

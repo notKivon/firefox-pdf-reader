@@ -52,8 +52,8 @@ test("one question, one fact, one action — and no noise", () => {
 
 test("the model is the one choice, current model selected, grouped by destination", () => {
   const node = card(PLAN);
-  const select = node.find("confirm-model-select");
-  assert.equal(node.find("confirm-model-name").textContent, "Gemini 4 Hydrogen", "the chosen name is shown as text");
+  const select = node.find("model-choice-select");
+  assert.equal(node.find("model-choice-name").textContent, "Gemini 4 Hydrogen", "the chosen name is shown as text");
   const options = select.options();
   assert.deepEqual(options.map((o) => o.value), ["claude-opus", "gemini-4-hydrogen", "ollama"]);
   assert.equal(options.find((o) => o.selected).value, "gemini-4-hydrogen");
@@ -85,7 +85,7 @@ test("nothing happens until the button is pressed, and then exactly once", () =>
   node.find("confirm-go").click();
   assert.equal(confirms, 1);
   // Another model re-plans and asks again; it never proceeds on its own.
-  node.find("confirm-model-select").choose("ollama");
+  node.find("model-choice-select").choose("ollama");
   assert.equal(picked, "ollama");
   assert.equal(confirms, 1, "choosing another model is not a confirmation");
 });

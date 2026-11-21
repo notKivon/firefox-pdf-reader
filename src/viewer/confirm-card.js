@@ -14,17 +14,17 @@
 // before the click. There is no auto-dismiss and no timeout: the paper reads in
 // the left pane regardless, which is what makes blocking here acceptable.
 import { el } from "./el.js";
-import { modelSelect, shortName } from "./provider-switch.js";
+import { modelChoice } from "./provider-switch.js";
 
 const WHERE = { google: "Google", anthropic: "Anthropic" };
 
 const plural = (n, word) => `${n.toLocaleString("en")} ${word}${n === 1 ? "" : "s"}`;
 
-// One decimal of a cent, marked approximate: the token count behind it is an
-// estimate, not a tokeniser's.
+// One decimal of a cent. "About" already says it is an estimate (the token
+// count behind it is not a tokeniser's), so nothing else does.
 function costText(dollars) {
   const cents = dollars * 100;
-  return cents < 0.1 ? "<0.1¢" : `≈${cents.toFixed(1)}¢`;
+  return cents < 0.1 ? "Under 0.1¢." : `About ${cents.toFixed(1)}¢.`;
 }
 
 // What leaves the machine and where it goes, in one sentence.
@@ -55,26 +55,10 @@ function sectionList(titles) {
 export function confirmCard(plan, { onConfirm, onPickProvider }) {
   const card = el("section", `confirm-card is-${plan.destination}`);
 
-  const ask = el("p", "confirm-ask");
-  const current = { id: plan.providerId, label: plan.label, destination: plan.destination };
-  const options = [current, ...(plan.otherProviders ?? [])];
-  if (options.length > 1) {
-    // Another model is a different thing being sent somewhere, so choosing one
-    // re-plans — it renders from that model's cache, or asks again.
-    // A native select is as wide as its longest option, which pushed the name
-    // onto a line of its own. So the chosen name is shown as text, sized to
-    // itself, with the real select laid invisibly over it: same clicks, same
-    // keyboard, same screen-reader control.
-    const choice = el("span", "confirm-model");
-    choice.append(
-      el("span", "confirm-model-name", shortName(plan.label)),
-      modelSelect(options, { label: "Model", onPick: onPickProvider, selectedId: plan.providerId, className: "confirm-model-select" }),
-    );
-    ask.append(el("span", null, "Outline with "), choice);
-  } else {
-    ask.append(el("span", null, `Outline with ${shortName(plan.label)}`));
-  }
-  card.append(ask);
+  // The model is the one choice. Another model is a different thing being sent
+  // somewhere, so choosing one re-plans — it renders from that model's cache,
+  // or asks again.
+  card.append(modelChoice(plan, { lead: "Outline with", onPick: onPickProvider, className: "confirm-ask" }));
 
   const fact = el("p", "confirm-fact", factText(plan));
   if (plan.estCost !== null && plan.estCost !== undefined) fact.append(el("span", "confirm-cost", ` ${costText(plan.estCost)}`));

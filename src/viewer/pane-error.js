@@ -10,7 +10,7 @@
 // chain: state the problem and *offer* another destination, as a choice, never
 // as an automatic fallback.
 import { el } from "./el.js";
-import { modelPicker } from "./provider-switch.js";
+import { modelChoice } from "./provider-switch.js";
 
 /**
  * @param {string} text what went wrong, in words
@@ -38,13 +38,9 @@ export function errorBox(text, { retry, plan, onPickProvider, details } = {}) {
     box.append(button);
   }
 
-  if (onPickProvider) {
-    const alt = modelPicker(plan?.alternatives, {
-      label: "Or send it somewhere else:",
-      onPick: onPickProvider,
-      className: "confirm-alt",
-    });
-    if (alt) box.append(alt);
+  // The way forward includes every other model, as the one model control.
+  if (onPickProvider && plan?.providerId && plan.otherProviders?.length) {
+    box.append(modelChoice(plan, { lead: "Try with", onPick: onPickProvider, className: "error-model" }));
   }
   return box;
 }

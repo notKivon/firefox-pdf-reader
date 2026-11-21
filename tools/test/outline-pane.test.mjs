@@ -66,7 +66,7 @@ await test("a fresh document plans, shows the card, and sends nothing", async ()
   assert.ok(root.find("confirm-card"), "the card is the pane's first state");
 });
 
-await test("a failure after the grant still offers the other destination", async () => {
+await test("a failure after the grant still offers every other model", async () => {
   const sent = stubBrowser((message) => {
     if (message.type !== "plan") return { error: "auth", message: "No API key is stored for Gemini 3.8 Flash." };
     // Consent is per cache key, so the grant on record covers only the provider
@@ -82,13 +82,14 @@ await test("a failure after the grant still offers the other destination", async
   // Consent was already on record, so no card: straight to the send, which fails.
   assert.equal(root.find("confirm-card"), null);
   assert.ok(root.find("pane-error").textContent.includes("No API key"), "the failure is in words");
-  const picker = root.find("model-picker");
-  const alternatives = picker?.options() ?? [];
-  assert.equal(alternatives.length, 1, "the error state must not strand the reader on one provider");
-  assert.equal(alternatives[0].textContent, "Gemma 4 E4B (local)");
+  // The one model control, with every model in it and the failed one chosen.
+  const picker = root.find("error-model")?.find("model-choice-select");
+  const models = picker?.options() ?? [];
+  assert.deepEqual(models.map((o) => o.value), ["gemini-prod", "gemini-dev", "ollama"], "the error state must not strand the reader on one provider");
+  assert.equal(models.find((o) => o.selected).value, "gemini-prod");
 
-  // Choosing it re-plans and asks again. It never sends.
-  picker.choose(alternatives[0].value);
+  // Choosing another re-plans and asks again. It never sends.
+  picker.choose("ollama");
   await settle();
   assert.deepEqual(sent.map((m) => m.type), ["plan", "outline", "plan"]);
   assert.equal(sent.at(-1).providerId, "ollama");
@@ -219,9 +220,12 @@ await test("a finished outline offers every other model, and picking one re-plan
   pane.start({ hash: "abc", meta: {}, sections: [{ title: "1 Intro", page: 1, y: 700, text: "words here" }] });
   await settle();
 
-  const picker = root.find("outline-switch").find("model-picker");
+  const line = root.find("outline-source");
+  assert.match(line.textContent, /^Outlined with/);
+  const picker = line.find("model-choice-select");
   const options = picker.options();
-  assert.equal(options.length, 2, "both other models, same destination included");
+  assert.equal(options.length, 3, "every model, the current one included, in one dropdown");
+  assert.equal(options.find((o) => o.selected).value, "gemini-prod");
   assert.ok(options.some((o) => o.textContent.includes("Gemma 4 E4B")), "the local one among them");
   const groups = picker.children.filter((c) => c.tag === "optgroup").map((g) => g.label);
   assert.ok(groups.includes("On this machine"), `and where it goes: ${groups}`);
