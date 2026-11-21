@@ -7,3 +7,5 @@ dist/
 .idea/
 web-ext-artifacts/
 .preview/
+# Local Claude Code state: preview mockups, launch settings, worktrees.
+.claude/
