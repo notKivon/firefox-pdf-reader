@@ -108,7 +108,7 @@ This file loads every session. Implementation detail is in **SPEC.md**; live bui
 ## Project values
 - Extension ID (`browser_specific_settings.gecko.id`): `scholar-reader@kevin.local`
 - Ollama endpoint: `http://127.0.0.1:11434`
-- Claude bridge: `http://127.0.0.1:8765` (`npm run bridge`, `tools/claude-bridge.mjs`); token in `~/.config/scholar-reader/bridge-token`
+- Claude bridge: `http://127.0.0.1:8765` (`npm run bridge`, `tools/claude-bridge.mjs`); token in `~/.config/scholar-reader/bridge-token`; started at login by the LaunchAgent `local.scholar-reader.bridge` (`npm run bridge:login`, 2026-11-21), log in `~/Library/Logs/scholar-reader-bridge.log` — restart it with `launchctl kickstart -k gui/$(id -u)/local.scholar-reader.bridge` after changing `tools/bridge/`
 - **Subscription, not API:** the Claude providers run through the local bridge on the user's Claude Code subscription login, never on an Anthropic API key. The bridge refuses to start unless `claude auth status` reports a `claude.ai` login, and it strips `ANTHROPIC_API_KEY`/`ANTHROPIC_AUTH_TOKEN` (and the Bedrock/Vertex switches) from the CLI's environment. Usage counts against the subscription's limits, which interactive Claude Code shares.
 - Gemini OpenAI-compatible base URL: `https://generativelanguage.googleapis.com/v1beta/openai/`
 - Default model: `claude-opus-5-5` (also `claude-sonnet-5-5`, `claude-haiku-5-5`) · Gemini: `gemini-4-argon`, `gemini-4-carbon`, `gemini-4-hydrogen`, `gemini-4-neon` (Neon added 2026-11-21; Gemini 3 removed 2026-11-18) · Offline model: `gemma4:e4b`

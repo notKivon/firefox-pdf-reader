@@ -106,6 +106,14 @@ Then, once per profile:
    The **Chat** tab, beside **Outline**, uses the same bridge. A bridge started
    before the chat tab existed doesn't understand chat requests: stop it with
    Ctrl+C and run `npm run bridge` again.
+   **To start it at every login instead,** run `npm run bridge:login` once. It
+   installs a LaunchAgent (`~/Library/LaunchAgents/local.scholar-reader.bridge.plist`)
+   that runs the bridge from this folder, logs to
+   `~/Library/Logs/scholar-reader-bridge.log`, and restarts it if it dies, or
+   retries every 30 s while Claude Code is not logged in. After pulling bridge
+   changes, restart it with `launchctl kickstart -k gui/$(id -u)/local.scholar-reader.bridge`.
+   Rerun `npm run bridge:login` after moving this folder or changing Node version,
+   because the agent holds both paths. `npm run bridge:login -- --off` removes it.
 7. **Only for the local model:** Ollama checks the request's `Origin`. With the
    macOS desktop app, run `launchctl setenv OLLAMA_ORIGINS "moz-extension://*"` and
    restart Ollama. This does not survive a reboot. If Ollama was started from a
@@ -161,6 +169,7 @@ document in the page. No data goes to the developer.
 | `npm run package` | Build, secrets gate, lint, then write the XPI and its source archive to `web-ext-artifacts/`. Refuses an uncommitted tree. |
 | `npm run check:secrets` | Fail if `dist/` or any tracked file contains an API key. Run before any packaging or signing step. |
 | `npm run bridge` | Start the local Claude bridge (Opus/Sonnet/Haiku on your Claude Code subscription). First run prints the token to paste into settings. |
+| `npm run bridge:login` | Start the bridge at every login as a LaunchAgent, and now; `-- --off` removes it. Log: `~/Library/Logs/scholar-reader-bridge.log`. |
 | `npm run probe` | Send one fixture to a real provider and report outline quality — spends real quota; see PROGRESS.md |
 
 ## Secrets
