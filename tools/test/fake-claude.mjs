@@ -2,12 +2,16 @@
 // Stands in for `claude -p ... --output-format stream-json` in bridge.test.mjs.
 // FAKE_CLAUDE_MODE picks the run: ok, retry, limit, error. The answer is the
 // schema-shaped JSON in FAKE_CLAUDE_ANSWER; argv is written to FAKE_CLAUDE_ARGV.
+// Like the real CLI, it lingers after the answer: FAKE_CLAUDE_TAIL_MS before a
+// text reply's `result` (the post-turn summary) and before exiting.
 import { writeFileSync } from "node:fs";
 
 const mode = process.env.FAKE_CLAUDE_MODE ?? "ok";
 const answer = process.env.FAKE_CLAUDE_ANSWER ?? '{"sections":[],"tldr":""}';
 const say = (obj) => process.stdout.write(`${JSON.stringify(obj)}\n`);
 const event = (e) => say({ type: "stream_event", event: e });
+const tail = Number(process.env.FAKE_CLAUDE_TAIL_MS ?? 0);
+const later = (fn) => setTimeout(fn, tail);
 
 if (process.argv[2] === "auth") {
   say({ loggedIn: true, authMethod: "claude.ai" });
@@ -40,12 +44,22 @@ process.stdin.on("end", () => {
 
   // No --json-schema: a chat turn, answered as text blocks.
   if (!process.argv.includes("--json-schema")) {
+    event({ type: "message_start", message: { usage: { input_tokens: 5 } } });
     const reply = process.env.FAKE_CLAUDE_TEXT ?? "A plain reply.";
     event({ type: "content_block_start", index: 0, content_block: { type: "text", text: "" } });
     event({ type: "content_block_delta", index: 0, delta: { type: "text_delta", text: reply.slice(0, 5) } });
     event({ type: "content_block_delta", index: 0, delta: { type: "text_delta", text: reply.slice(5) } });
     event({ type: "content_block_stop", index: 0 });
-    say({ type: "result", is_error: false, result: reply, usage: { input_tokens: 5, output_tokens: 7 } });
+    const stop = process.env.FAKE_CLAUDE_STOP ?? "end_turn";
+    event({ type: "message_delta", delta: { stop_reason: stop }, usage: { output_tokens: 7 } });
+    event({ type: "message_stop" });
+    const result = stop === "end_turn"
+      ? { type: "result", is_error: false, result: reply, usage: { input_tokens: 5, output_tokens: 7 } }
+      : { type: "result", is_error: true, result: "The reply was cut off." };
+    later(() => {
+      say(result);
+      later(() => process.exit(0));
+    });
     return;
   }
 
@@ -69,4 +83,5 @@ process.stdin.on("end", () => {
     structured_output: JSON.parse(answer),
     usage: { input_tokens: 10, cache_creation_input_tokens: 100, cache_read_input_tokens: 0, output_tokens: 50 },
   });
+  later(() => process.exit(0));
 });

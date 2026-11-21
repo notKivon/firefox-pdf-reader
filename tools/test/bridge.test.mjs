@@ -156,6 +156,51 @@ await test("a chat turn runs without a schema and carries the earlier turns", as
   assert.match(stdin, /The reader's new message:\n\nSecond\?$/);
 });
 
+// Measured on the real CLI 2026-11-21: a text reply is whole ~2.5 s before the
+// process exits, a structured one ~0.8 s. The bridge answers at the answer.
+await test("a chat reply returns when it is whole, not when Claude Code exits", async () => {
+  const { chatText } = await import("../../src/model/openai-compat.js");
+  process.env.FAKE_CLAUDE_TEXT = "Done early.";
+  process.env.FAKE_CLAUDE_TAIL_MS = "3000";
+  try {
+    const started = Date.now();
+    const result = await chatText({ providerId: "claude-opus", provider, apiKey: token, messages, onText: () => {} });
+    assert.equal(result.text, "Done early.");
+    assert.equal(result.usage.prompt_tokens, 5, "usage read from the stream");
+    assert.equal(result.usage.completion_tokens, 7);
+    assert.ok(Date.now() - started < 1_500, `took ${Date.now() - started} ms`);
+  } finally {
+    delete process.env.FAKE_CLAUDE_TAIL_MS;
+  }
+});
+
+await test("an outline returns at its result line, not when Claude Code exits", async () => {
+  process.env.FAKE_CLAUDE_MODE = "ok";
+  process.env.FAKE_CLAUDE_TAIL_MS = "3000";
+  try {
+    const started = Date.now();
+    const result = await ask();
+    assert.deepEqual(result.data, answer);
+    assert.equal(result.usage.prompt_tokens, 110);
+    assert.ok(Date.now() - started < 1_500, `took ${Date.now() - started} ms`);
+  } finally {
+    delete process.env.FAKE_CLAUDE_TAIL_MS;
+  }
+});
+
+await test("a reply cut short waits for Claude Code to say why", async () => {
+  const { chatText } = await import("../../src/model/openai-compat.js");
+  process.env.FAKE_CLAUDE_STOP = "max_tokens";
+  try {
+    await assert.rejects(
+      chatText({ providerId: "claude-opus", provider, apiKey: token, messages, onText: () => {} }),
+      (err) => err.status === 502 && /cut off/.test(err.message),
+    );
+  } finally {
+    delete process.env.FAKE_CLAUDE_STOP;
+  }
+});
+
 await test("a PDF reaches Claude Code as a document block, never as text", async () => {
   const { chatText } = await import("../../src/model/openai-compat.js");
   const { pdfPart } = await import("../../src/model/pdf.js");

@@ -15,6 +15,9 @@ import { spawn } from "node:child_process";
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { BridgeError, finish, handleLine, newState } from "./stream.mjs";
+
+export { BridgeError };
 
 export const MODELS = new Set(["claude-opus-5-5", "claude-sonnet-5-5", "claude-haiku-5-5"]);
 
@@ -33,14 +36,6 @@ export function childEnv() {
   const env = { ...process.env };
   for (const name of BILLING_ENV) delete env[name];
   return env;
-}
-
-export class BridgeError extends Error {
-  constructor(message, { status = 502, retryAfterSec } = {}) {
-    super(message);
-    this.status = status;
-    this.retryAfterSec = retryAfterSec;
-  }
 }
 
 const emptyDir = mkdtempSync(join(tmpdir(), "scholar-bridge-"));
@@ -96,7 +91,7 @@ export function runClaude({ model, system, user, schema, documents = [], signal,
     stderr = (stderr + chunk).slice(-2000);
   });
 
-  const state = { text: !schema, outputIndex: null, outputs: 0, rejectedUntil: null, result: null, stage: null };
+  const state = newState(!schema);
   const stage = (next) => {
     if (state.stage === next) return;
     state.stage = next;
@@ -119,39 +114,62 @@ export function runClaude({ model, system, user, schema, documents = [], signal,
   const hooks = { onDelta, onReset, onAlive: () => { rearm(); onAlive(); }, stage };
 
   let buffer = "";
+  let settled = false;
+  let resolveRun;
+  let rejectRun;
+  const run = new Promise((resolve, reject) => {
+    resolveRun = resolve;
+    rejectRun = reject;
+  });
+  // Said once: when the answer is complete (and the child is stopped, since
+  // what it does after that is not for the reader), or when the child exits.
+  const settle = (code) => {
+    if (settled) return;
+    settled = true;
+    clearTimeout(quiet);
+    signal?.removeEventListener("abort", kill);
+    if (signal?.aborted) return rejectRun(new BridgeError("cancelled", { status: 499 }));
+    if (stalled) {
+      const seconds = Math.round(stallMs / 1000);
+      return rejectRun(new BridgeError(
+        `Claude Code went quiet — no output for ${seconds} s — so the bridge stopped the run. Nothing was cached; trying again usually works.`,
+        { status: 504 },
+      ));
+    }
+    try {
+      resolveRun(finish(state, code, stderr));
+    } catch (err) {
+      rejectRun(err);
+    }
+  };
+
   child.stdout.on("data", (chunk) => {
+    if (settled) return;
     buffer += chunk;
     let split;
     while ((split = buffer.indexOf("\n")) !== -1) {
       const line = buffer.slice(0, split).trim();
       buffer = buffer.slice(split + 1);
       if (line) handleLine(line, state, hooks);
+      if (state.complete) {
+        settle(null);
+        kill();
+        return;
+      }
     }
   });
 
-  return new Promise((resolve, reject) => {
-    child.on("error", (err) => {
-      reject(new BridgeError(`Could not start Claude Code (${claudeBin()}): ${err.message}`));
-    });
-    child.on("close", (code) => {
-      clearTimeout(quiet);
-      signal?.removeEventListener("abort", kill);
-      if (buffer.trim()) handleLine(buffer.trim(), state, hooks);
-      if (signal?.aborted) return reject(new BridgeError("cancelled", { status: 499 }));
-      if (stalled) {
-        const seconds = Math.round(stallMs / 1000);
-        return reject(new BridgeError(
-          `Claude Code went quiet — no output for ${seconds} s — so the bridge stopped the run. Nothing was cached; trying again usually works.`,
-          { status: 504 },
-        ));
-      }
-      try {
-        resolve(finish(state, code, stderr));
-      } catch (err) {
-        reject(err);
-      }
-    });
+  child.on("error", (err) => {
+    if (settled) return;
+    settled = true;
+    clearTimeout(quiet);
+    rejectRun(new BridgeError(`Could not start Claude Code (${claudeBin()}): ${err.message}`));
   });
+  child.on("close", (code) => {
+    if (!settled && buffer.trim()) handleLine(buffer.trim(), state, hooks);
+    settle(code);
+  });
+  return run;
 }
 
 function streamInput(documents, text) {
@@ -160,66 +178,6 @@ function streamInput(documents, text) {
     { type: "text", text },
   ];
   return `${JSON.stringify({ type: "user", message: { role: "user", content } })}\n`;
-}
-
-function handleLine(line, state, { onDelta, onReset, onAlive, stage }) {
-  let msg;
-  try {
-    msg = JSON.parse(line);
-  } catch {
-    return; // Not a protocol line.
-  }
-  onAlive();
-
-  if (msg.type === "rate_limit_event" && msg.rate_limit_info?.status === "rejected") {
-    state.rejectedUntil = msg.rate_limit_info.resetsAt ?? null;
-  } else if (msg.type === "result") {
-    state.result = msg;
-  } else if (msg.type === "stream_event") {
-    const event = msg.event ?? {};
-    const wanted = state.text ? event.content_block?.type === "text" : event.content_block?.name === "StructuredOutput";
-    if (event.type === "content_block_start" && event.content_block?.type === "thinking") stage("thinking");
-    if (event.type === "content_block_start" && wanted) {
-      stage("writing");
-      state.outputIndex = event.index;
-      // A second structured answer replaces the first; a second text block
-      // (after a think, say) continues the reply.
-      if (state.outputs++ > 0 && !state.text) onReset();
-    } else if (event.type === "content_block_delta" && event.index === state.outputIndex) {
-      const piece = state.text ? event.delta?.text : event.delta?.partial_json;
-      if (typeof piece === "string" && piece) onDelta(piece);
-    } else if (event.type === "content_block_stop" && event.index === state.outputIndex) {
-      state.outputIndex = null;
-    }
-  }
-}
-
-function finish({ result, rejectedUntil, text }, code, stderr) {
-  const retryAfterSec = rejectedUntil ? Math.max(1, Math.round(rejectedUntil - Date.now() / 1000)) : undefined;
-  if (rejectedUntil || result?.api_error_status === 429) {
-    const message = result?.result || "Claude Code usage limit reached.";
-    throw new BridgeError(message, { status: 429, retryAfterSec });
-  }
-  if (!result) {
-    throw new BridgeError(`Claude Code exited (${code}) without a result. ${stderr.trim()}`.trim());
-  }
-  if (result.is_error) {
-    const status = result.api_error_status === 401 || result.api_error_status === 403 ? 401 : 502;
-    throw new BridgeError(String(result.result || "Claude Code reported an error."), { status });
-  }
-  if (!text && (!result.structured_output || typeof result.structured_output !== "object")) {
-    throw new BridgeError("Claude Code finished without a structured answer.");
-  }
-  if (text && typeof result.result !== "string") {
-    throw new BridgeError("Claude Code finished without a reply.");
-  }
-  const u = result.usage ?? {};
-  const prompt = (u.input_tokens ?? 0) + (u.cache_creation_input_tokens ?? 0) + (u.cache_read_input_tokens ?? 0);
-  const completion = u.output_tokens ?? 0;
-  return {
-    ...(text ? { text: result.result } : { structured: result.structured_output }),
-    usage: { prompt_tokens: prompt, completion_tokens: completion, total_tokens: prompt + completion },
-  };
 }
 
 /** What Claude Code is logged in as, so the bridge can refuse to bill an API key. */
