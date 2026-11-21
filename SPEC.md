@@ -1,65 +1,64 @@
-# Scholar Reader — Build Spec
+# Scholar Reader — How it works
 
-Implementation detail for each part. Core domain rules live in **CLAUDE.md** — follow those exactly; this file doesn't restate them. Step order and live status are in **PROGRESS.md**.
+What each part does and why it is built the way it is. The rules the code must keep live in **CLAUDE.md** and are not restated here; release history and the reasoning behind past decisions are in **PROGRESS.md**.
 
 ## Repository layout
 
 ```
 src/
-  background/
-    index.js         entry: wires interceptor + message router
+  background/        the extension's event page — the only place a provider is called
+    index.js         entry: wires interceptor, message router, toolbar button
     intercept.js     webRequest.onHeadersReceived → capture (or, as a fallback, redirect)
     capture.js       StreamFilter capture of the PDF response, header rewrite, hand-off
     skeleton.js      the scriptless reader-shaped page shown during a capture
     prefs.js         theme + outline width mirrored for skeleton pages
-    router.js        runtime.onMessage handler; the ONLY place provider calls happen
+    router.js        runtime.onMessage handler; outline runs, the consent gate
     plan.js          the `plan` message: what would be sent, and where, without sending
+    chat.js          chat-plan / chat / chat-history / chat-clear
+    records.js       grant, open-doc, save-position, consents, revoke
     bypass.js        single-use per-tab pass for the escape hatch to the browser's own viewer
-    watchdog.js      abandons a run with no progress for STALL_MS as a `stalled` error
-  viewer/
-    viewer.html      two-pane shell
-    viewer.js        entry: boots PDFViewer, wires panes
-    source.js        where the PDF comes from: captured bytes, interceptor URL, or a picked local file
-    timing.js        one console line per opened paper: where the load time went
-    actions.js       toolbar: settings, browser's own viewer, open local file
+    watchdog.js      abandons a run with no sign of life as a `stalled` error; Stop cancels it
+  viewer/            the reader page
+    viewer.html/.js  two-pane shell and boot order
+    source.js        captured bytes, interceptor URL, or a picked local file
     pdfview.js       pdfjs-dist PDFViewer setup, scrollToSection(), theme
-    outline-pane.js  renders sections/bullets, click-to-jump, scroll-spy
-    locate.js        which lines of a section a bullet restates (no model involved)
-    provider-switch.js  change model on a finished outline
-    pane-resize.js   draggable edge between the panes, width in storage.local
-    toolbar-fields.js  typed page number and zoom percentage
+    outline-pane.js  plan → card → grant → send, and the error states
+    outline-progress.js  stage, elapsed time, silence, Stop
+    outline-ready.js / outline-list.js / outline-sections.js  the finished outline
     confirm-card.js  the send-confirmation state of the outline pane
-    theme.css        :root dark tokens + [data-theme="light"] override
-    controls.css     toolbar fields and the pane resize handle
-  extract/
-    textlayer.js     getTextContent → positioned items
-    columns.js       column clustering, reading-order sort
-    sections.js      heading detection, section assembly, References cutoff
-  model/
+    provider-switch.js  the one model dropdown
+    locate.js / locate-quote.js  which lines a bullet restates (no model involved)
+    jump-flash.js / back-jump.js / scroll-spy.js  arrival band, Back, current section
+    chat-pane.js / chat-render.js  the Chat tab
+    math.js          KaTeX typesetting of $…$ and $$…$$
+    pane-tabs.js / pane-resize.js / toolbar-fields.js / actions.js / download.js
+    doc-meta.js      sha256 identity and PDF metadata
+    debug-pane.js    the collapsed Extraction panel
+    *.css            theme.css (tokens), controls, outline, chat, progress, debug, fonts
+  extract/           text layer → lines → columns → sections, all without a model
+    textlayer.js lines.js columns.js sections.js assemble.js anchor.js normalize.js stats.js
+  model/             providers and the wire
     providers.js     provider descriptors (no keys)
     adapter.js       outline(document) → sections[]; strategy dispatch, fallback
-    transport.js     picks the wire a provider is spoken to over
-    openai-compat.js fetch against an OpenAI-compatible chat-completions endpoint
-    ollama-native.js fetch against Ollama's own /api/chat (NDJSON, `options`)
-    wire.js          JSON decode + the two failures both transports share
-    prompts.js       PROMPT_VERSION + prompt builders + JSON schema
-  store/
-    db.js            IndexedDB open/upgrade
-    docs.js          document records, reading position (background only)
-    outlines.js      outline cache, cache key construction
-    consent.js       per-cache-key send consent records (background only)
-    quota.js         per-provider request counters keyed by Pacific date
-    apikeys.js       provider keys in storage.local, read only by the background
-    settings.js      provider order and origin opt-out list, normalised
-    inbox.js         captured PDF bytes awaiting their viewer tab (1 h TTL)
-  settings/
-    settings.html    key entry, provider order, origin opt-out, consent revocation
-    settings.js      entry; one *-section.js per section, model.js for the testable logic
-    back.js          opening settings from a reader tab, and Back to that tab
-fixtures/            saved extracted-section JSON for prompt iteration
+    model-sections.js  one request for a provider that chooses its own sections
+    prompts.js / paper-prompt.js / chat-prompt.js  prompts, schemas, versions
+    transport.js / openai-compat.js / ollama-native.js / wire.js  the two wires
+    pdf.js           sending the PDF itself
+    align.js errors.js estimate.js partial-json.js
+  store/             IndexedDB (background only) and storage.local
+    db.js docs.js outlines.js cache-key.js consent.js quota.js inbox.js chats.js
+    apikeys.js settings.js   (storage.local; readable by pages)
+  settings/          the settings page, one *-section.js per section, model.js for the testable logic
 tools/
-  check-secrets.mjs  greps dist/ and tracked files for key prefixes
-  package.mjs        XPI + source archive for AMO, gated on check:secrets
+  claude-bridge.mjs + bridge/   the local Claude Code bridge
+  bridge-login.mjs   installs/removes the login LaunchAgent
+  check-secrets.mjs  greps dist/ and tracked files for key-shaped strings
+  package.mjs        XPI + source archive for AMO, gated on check:secrets and lint
+  extract-pdf.mjs    the extension's own extraction, run in Node
+  *-probe.mjs        real requests against a provider (spend quota or subscription usage)
+  test/              npm test: Node, stubs, no network
+fixtures/            saved extracted-section JSON for prompt iteration
+docs/screenshots/    README images
 esbuild.config.mjs
 manifest.json
 ```
@@ -93,15 +92,10 @@ manifest.json
 ## viewer/confirm-card.js
 The outline pane's first state for any document with no consent record. Implements CLAUDE.md's send-confirmation rule; it is a pane state, not a dialog.
 
-- `render(plan, { onConfirm, onPickProvider })` draws, from the router's `plan` response:
-  - document title and page count;
-  - `N sections · ~M tokens` (characters ÷ 4, stated as approximate — a real tokeniser is not worth bundling for a number shown to one reader);
-  - the destination in words: `"Sent to Google (Gemini 3.8 Flash)"` or `"Stays on this machine (Gemma 4 E4B, 127.0.0.1)"`;
-  - estimated cost when the descriptor carries `pricing`, rendered to one decimal of a cent and marked `est.`;
-  - a primary **Generate outline** button, and a secondary control listing the other-destination providers so the local model can be chosen deliberately.
-- `onConfirm` writes the consent record **before** sending, so a crash mid-request cannot lose the grant and re-ask.
-- Section titles are listed in a collapsed `<details>` — "what exactly gets sent" is the question the card exists to answer, and the titles are the honest short answer. The References cutoff has already run by this point, so what the list shows is what goes.
-- No auto-dismiss and no timeout: an unanswered card stays. The paper is readable in the left pane regardless, which is why blocking here is acceptable.
+- Drawn from the router's `plan` response: "Outline with [model ▾]" (the one model control, `provider-switch.js#modelChoice`), one sentence of what leaves and for whom ("Sends the 15-page PDF to Anthropic.", "Sends 19 sections of text to Google.", "Stays on this machine."), a cost only when the descriptor carries `pricing` ("About 2.4¢."), a missing key said before the click, and one **Generate outline** button.
+- A provider sent extracted sections keeps a folded "Which sections" list — what exactly gets sent, after the References cut.
+- The page asks the router to record the grant **before** sending (`grant`), so a crash mid-request cannot lose it and re-ask. The router's gate re-reads it regardless.
+- No auto-dismiss and no timeout: an unanswered card stays. The paper is readable in the left pane regardless.
 
 ## viewer/locate.js
 Implements CLAUDE.md's "a bullet jumps to the lines it restates". Given a bullet and its section's own extracted lines, returns `{page, y, yEnd, height}` or `null`.
@@ -116,69 +110,38 @@ Implements CLAUDE.md's "a bullet jumps to the lines it restates". Given a bullet
 
 ## extract/columns.js
 - Input: text items with `transform` (pdf.js gives `[a,b,c,d,x,y]`), `width`, `height`, `fontName`.
-- Group items into lines by `y` within a tolerance of `0.4 × modal item height`.
-- Column detection: take each item's x-midpoint; run 2-means on the midpoints. Accept the 2-column split only when the gap between cluster centres exceeds `0.15 × page width` **and** both clusters hold at least 20% of items. Otherwise treat the page as single-column.
-- Emit lines in reading order: for two columns, all of the left column top-to-bottom, then the right.
+- Items are grouped into lines by `y` within a tolerance of `0.4 × modal item height`.
+- Two columns are found per page. The gutter is the x between the two column centres that the fewest runs cross (`gutter`) — not the midpoint of the centres, which a running header or a wide left column defeats. Each page uses its own gutter where it shows two columns, the paper-wide value (the median of the pages') otherwise.
+- A row whose runs meet across the gutter with only a word space between them is one full-width line (an abstract box, an author list), not two half-lines (`rowsRunningAcross`).
+- Lines are emitted in reading order: on a two-column page, the left column top to bottom, then the right. Each line record keeps `x` and `right`, so a jump's arrival band can cover only its column.
 
-## extract/sections.js
-- Body font size = modal item height across the document, not per page.
-- A line is a heading candidate when it is under 80 characters **and** (height > 1.1 × body size **or** its `fontName` matches `/bold|black|semibold/i`), **and** it either matches `/^(\d+(\.\d+)*|[IVXL]+)[.)\s]/` or appears in the vocabulary below (case-insensitive, allowing a trailing colon).
-- Vocabulary: Abstract, Introduction, Background, Related Work, Preliminaries, Method, Methods, Methodology, Materials, Model, Data, Experiments, Experimental Setup, Evaluation, Results, Analysis, Discussion, Limitations, Future Work, Conclusion, Conclusions, References, Bibliography, Appendix, Acknowledgements, Acknowledgments.
-- On matching References/Bibliography, stop and discard everything after.
-- Each section record: `{ title, page, y, text }` where `y` is the heading line's PDF-space y for `scrollPageIntoView`.
-- Fallback when fewer than 2 sections are found: split the body text into ~1200-token chunks titled `Pages N–M`. A degraded outline beats an error.
+## extract/sections.js and assemble.js
+- Body font size = modal item height across the document, not per page (`stats.js`).
+- **Bookmarks first:** when `getOutline()` returns them they are the sections, each placed on the line that carries its own title nearest the bookmark's y, then sorted into reading order.
+- Otherwise a line is a heading candidate when it is short **and** set apart (larger than body, a bold face, or IEEE-style small capitals at body size such as "IV. RESULTS") **and** it is numbered (`1`, `3.2`, `IV.`, a lettered `A.` subsection where set apart) or in the vocabulary below. Numbered sentences and lines cut at a hyphen are not headings.
+- Vocabulary: Abstract, Introduction, Background, Related Work, Preliminaries, Method(s), Methodology, Materials, Model, Data, Experiments, Experimental Setup, Evaluation, Results, Analysis, Discussion, Limitations, Future Work, Conclusion(s), References, Bibliography, Appendix, Acknowledg(e)ments.
+- Text before the first heading becomes a first section, "Title and abstract" (or "Title and authors" when the abstract has its own heading).
+- On References/Bibliography, stop and discard everything after. Hard cap of 40 sections.
+- Each section record: `{ title, page, y, text, lines }`; `lines` (`{page, y, height, x, right, str}`) never leave the page — see below.
+- `paper`: every line in reading order up to the References cut, for providers that choose their own sections.
+- Fallback when fewer than 2 sections are found: ~1200-token chunks titled `Pages N–M`. Under 200 characters per page on average is a scanned PDF: no sections, no call.
 
 ## model/providers.js
-Descriptors only — no keys. Exact initial content:
+Descriptors only — no keys. Each carries `label`, `baseUrl`, `model`, `keyRef` (the `storage.local` slot, or `null`), `destination` (the party the text reaches — consent and fallback are scoped by it), `strategy`, `limits`, `pricing` (per million tokens, read only by the confirm card), `promptStyle`, and where relevant `sections: "model"`, `pdf: true`, `pdfTokensPerPage`, `bridge: true`, `useNativeEndpoint`.
 
-```js
-export const PROVIDERS = {
-  "gemini-prod": {
-    label: "Gemini 3.8 Flash",
-    baseUrl: "https://generativelanguage.googleapis.com/v1beta/openai/",
-    model: "gemini-3.8-flash",
-    keyRef: "gemini",
-    destination: "google",
-    strategy: "whole-document",
-    limits: { rpd: 10_000, rpm: 1_000, tpm: 2_000_000 },
-    pricing: { inPerM: 0.75, outPerM: 3.75 },
-    params: { reasoning_effort: "low" },
-    supports: { jsonSchema: true, streaming: true, reasoningOff: false },
-  },
-  "gemini-dev": {
-    label: "Gemini 3.5 Flash-Lite (development)",
-    baseUrl: "https://generativelanguage.googleapis.com/v1beta/openai/",
-    model: "gemini-3.5-flash-lite",
-    keyRef: "gemini",
-    destination: "google",
-    strategy: "per-section",
-    limits: { rpd: 150_000, rpm: 4_000, tpm: 4_000_000 },
-    supports: { jsonSchema: true, streaming: true, reasoningOff: true },
-  },
-  "ollama": {
-    label: "Gemma 4 E4B (local)",
-    baseUrl: "http://127.0.0.1:11434/v1/",
-    model: "gemma4:e4b",
-    keyRef: null,
-    destination: "local",
-    strategy: "per-section",
-    limits: null,
-    useNativeEndpoint: true,
-    params: { options: { num_ctx: 32768 }, think: false },
-    supports: { jsonSchema: true, streaming: true, reasoningOff: true },
-  },
-};
-```
+| id | model | destination | strategy | sections | style |
+|---|---|---|---|---|---|
+| `claude-opus` (default) | `claude-opus-5-5` | `anthropic` | whole-document | model | guidelines |
+| `claude-sonnet` | `claude-sonnet-5-5` | `anthropic` | whole-document | model | guidelines |
+| `claude-haiku` | `claude-haiku-5-5` | `anthropic` | whole-document | model | strict |
+| `gemini-4-argon` / `-carbon` / `-hydrogen` / `-neon` | same | `google` | whole-document | model | guidelines |
+| `ollama` | `gemma4:e4b` | `local` | per-section | extracted | strict |
 
-Limits above are the **real Tier 1 (paid) numbers**, confirmed 2026-09-11 — the free-tier figures this spec was drafted with were placeholders and were an order of magnitude out. `tpm` is recorded because it, not `rpd`, is the limit a whole-document request can realistically approach.
-
-`destination` names the party the text reaches, and is what consent and automatic fallback are scoped by (CLAUDE.md). `pricing` is per million tokens, and exists only so the confirm card can state a cost; nothing else reads it. The Gemini figures are promotional and double on 2027-01-01 — the constant needs updating by hand then.
-
-`ollama` gained `useNativeEndpoint` and `think: false` at step 12; see `model/ollama-native.js` below for why the OpenAI-compatible layer could not carry `num_ctx`.
-
-`gemini-prod` **keeps `strategy: "whole-document"`**, decided 2026-09-11 after the original reason for it (a 20-requests-per-day cap) turned out never to have existed. It stays because it is cheapest in tokens, gives a TL;DR written from the full text rather than from a digest of its own bullets, and keeps quota and 429 fallback to one clean request per paper; the alignment risk that argued against it is answered by the adapter's title checksum rather than by changing strategy. `per-section` is not the poor relation here — it is what `gemini-dev` and `ollama` use, so that path is built and exercised regardless of what the default does.
-
-The module also exports `DEFAULT_PROVIDER_ID` (`"gemini-prod"` — the user's stated preference) and `FALLBACK_ORDER` (`["gemini-prod", "gemini-dev"]`, Google only: the local model is never an automatic fallback target, per the user's preference), plus `getProvider(id)` which throws on an unknown id so a bad settings value fails by name, and `fallbacksFor(id)` which returns the order filtered to the same `destination`.
+- Claude goes through the local bridge (`baseUrl` `http://127.0.0.1:8765/v1/`, `keyRef: "claude-bridge"` — the bridge's token, not an Anthropic key), `pricing: null` because a subscription has no per-token price.
+- Gemini 4 limits and pricing are not filled in: a guess on the confirm card would be worse than no line.
+- `ollama` uses `useNativeEndpoint` and `params: { options: { num_ctx: 32768 }, think: false }` — see `model/ollama-native.js`.
+- The module exports `DEFAULT_PROVIDER_ID` (`claude-opus`), `FALLBACK_ORDER` (Opus alone — nothing is switched to automatically), `getProvider(id)` which throws on an unknown id, and `fallbacksFor(id)`, which returns only ids in `FALLBACK_ORDER` of the same destination, in the reader's order.
+- Test-only descriptors for the per-section-over-OpenAI and fallback paths live in `tools/test/test-providers.mjs`.
 
 ## model/adapter.js
 - `outline(doc, sections, providerId)`:
@@ -186,7 +149,7 @@ The module also exports `DEFAULT_PROVIDER_ID` (`"gemini-prod"` — the user's st
   - `per-section` → one request per section, dispatched with concurrency 3, each resolving independently so the pane can fill progressively; then one reduce request for the TL;DR.
 - **Sections with empty text are never sent** — `extract/assemble.js` keeps them deliberately (a parent heading whose first subsection follows immediately), but CLAUDE.md's "2–4 bullets per section" cannot apply to a section with nothing in it. They are excluded from the payload and re-inserted, bullet-less, at their original index before the result is returned. Under `per-section` an empty request would also be a wasted one.
 - **Alignment is verified, not assumed.** `page` and `y` are re-attached from the input section at that index; the model's echoed `title` is compared against the input title and a mismatch — or a returned section count other than the number sent — is treated as a malformed response per CLAUDE.md. The check runs **before** the outline is written to the cache: an unverified outline must never become a cache entry, because cache hits render with no confirmation and no network request and would serve the bad jump targets forever.
-- Wraps every call in the quota check **and the consent check**. On `rpd` exhaustion or HTTP 429, moves to the next same-destination entry in the user's configured fallback order and reports which provider actually served the result; when that runs out it raises `consent-required` for the next destination rather than crossing to it (CLAUDE.md).
+- Wraps every call in the quota check **and the consent check**. On `rpd` exhaustion or HTTP 429, moves to the next same-destination entry of `FALLBACK_ORDER` and reports which provider actually served the result; when that runs out it raises `consent-required` for the next destination rather than crossing to it (CLAUDE.md).
 - Under `per-section`, consent is checked once for the run, not per request — the cache key is the same for every section of one document.
 - Returns `{ sections: [{title, page, y, bullets: []}], tldr, providerId, model, usage }`.
 
@@ -207,24 +170,24 @@ The escape hatch above, taken — by Ollama rather than by Gemini, and for a dif
 - Same `chatJson` signature and return shape as `openai-compat.js`; `transport.js` picks between them off `useNativeEndpoint`. The adapter never learns which answered.
 
 ## model/prompts.js
-- `export const PROMPT_VERSION = 1;` — bump on any prompt text or schema change.
-- JSON schema: `{ sections: [{ title: string, bullets: string[] }], tldr: string }`. Section order must match input order. The adapter re-attaches `page`/`y` by index and uses the echoed `title` **only as a checksum** — the echo is never the source of truth for where a bullet points, but it is what makes a drift detectable.
-- Constrain in the schema whatever the schema can carry, since structured output is constrained decoding and anything expressible there is enforced rather than merely asked for: `bullets` as `minItems: 2, maxItems: 4`, and `sections` pinned to exactly the number of sections sent (`minItems` = `maxItems` = N).
-- ⚠️ **Whether those two keywords actually bind is unverified.** OpenAI's `strict` mode rejects `minItems`/`maxItems` as unsupported keywords; Gemini's native schema type accepts them; Gemini's OpenAI-compatibility layer is beta and its keyword coverage is undocumented. Step 7's first real call must establish which — if they are rejected or silently ignored, the counts fall back to prompt instruction plus the adapter's post-hoc check, and the adapter's verification becomes the only real guarantee.
-- The ≤20-word limit and extractiveness cannot be expressed in a schema at all, so they are prompt-side and checked by measurement, not enforced.
-- Prompt states (`promptStyle: "strict"`): extractive only, 2–4 bullets, ≤20 words each, keep reported numbers verbatim, no bullets about the reference list, and echo each section's title exactly as given.
-- `promptStyle: "guidelines"` (Opus, Sonnet; 2026-11-18): the same intent written as guidance, with bullet count and length left to the model; `bullets` loses `maxItems` (keeps `minItems: 1`). The title echo and JSON-only lines stay firm. Measured on `adam` with Opus: 10/10 sections aligned, 33 bullets, median 32 words (max 58), TL;DR one paragraph. `viewer/locate.js` was tuned on bullets of 20 words or fewer; how often longer bullets land on their own lines has not been measured.
+- `PROMPT_VERSION` (currently 5) — bump on any prompt text or schema change; it is part of the cache and consent key.
+- Schema for a provider sent extracted sections: `{ sections: [{ title, bullets: string[] }], tldr }`, section count pinned (`minItems` = `maxItems` = N). Order matches input order; the adapter re-attaches `page`/`y` by index and uses the echoed `title` **only as a checksum**.
+- Whatever the schema can carry is put there, since structured output is constrained decoding: Gemini and Ollama both honour `minItems`/`maxItems` (measured).
+- `promptStyle: "strict"` (Haiku, Gemma): extractive, 2–4 bullets, ≤ 20 words each, keep reported numbers verbatim, no bullets about the reference list, echo each title exactly. The word limit and extractiveness are not expressible in a schema, so they are measured, not enforced.
+- `promptStyle: "guidelines"` (Opus, Sonnet, Gemini 4): the same intent written as guidance, bullet count and length left to the model; `bullets` keeps `minItems: 1` and loses `maxItems`. The title echo and JSON-only lines stay firm.
+- Every prompt asks for maths as LaTeX, `$…$` inline and `$$…$$` displayed.
+- `paper-prompt.js` is the schema and instructions for providers that choose their own sections (below).
 
 ## tools/claude-bridge.mjs (+ tools/bridge/)
 - Loopback HTTP on `127.0.0.1:8765`, one route: `POST /v1/chat/completions`, answered as SSE so `openai-compat.js` reads it as it reads Gemini.
 - Access: `Origin` must start with `moz-extension://`, and `Authorization: Bearer <token>` must match `~/.config/scholar-reader/bridge-token` (generated on first run, mode 600, `srb_` + hex). Model must be one of the three Claude ids; anything else is a 400.
 - Runs `claude -p --model <id> --output-format stream-json --verbose --include-partial-messages --json-schema <schema> --system-prompt <system> --tools "" --strict-mcp-config --no-session-persistence --setting-sources ""` in an empty temp dir; the paper goes on stdin. The StructuredOutput tool's `input_json_delta`s are forwarded as content deltas, so the pane fills progressively.
 - Headers are held up to 8 s so early failures keep their status: usage limit → 429 with `Retry-After` from the CLI's `rate_limit_event`; CLI error → 502 with its message; bad login → 401. After the 200 is committed, a failure is a `data: {"error": {status, message, retry_after}}` chunk, and a restarted answer is replaced by a `final_content` chunk. Only the run's own lines poke the stall watchdog through `onAlive` — data lines and `: alive`, never the bridge's timed `: keep-alive`, which says the bridge is up, not that the run is (2026-11-21: counting it let a hung CLI spin forever). The bridge kills a child silent for 150 s (`STALL_MS`) and answers 504 in words. It reports the run's stage as `{stage: "reading"|"thinking"|"writing"}` chunks, opening the stream at the first non-reading stage; the router forwards stages, and life at most every 5 s, to the pane's progress line (`viewer/outline-progress.js`). **Stop** sends `outline-stop`; the router cancels that hash's watchdog, the fetch aborts, the bridge sees the client go and kills the child, and the run ends as `cancelled`.
-- A run is complete at its `result` line, or for a text reply at an `end_turn` `message_stop` (text and usage from the stream); the bridge answers then and stops the child, rather than waiting ~0.8–2.5 s for Claude Code to exit (`tools/bridge/stream.mjs`, step 30).
-- Started at login by the LaunchAgent `local.scholar-reader.bridge`, which `tools/bridge-login.mjs` (`npm run bridge:login`, `-- --off`) writes: this checkout's `tools/claude-bridge.mjs` under the absolute node and a PATH holding `claude`, `RunAtLoad`, restarted on an unsuccessful exit every 30 s, log `~/Library/Logs/scholar-reader-bridge.log` (step 31). After a change to the bridge, `launchctl kickstart -k gui/$(id -u)/local.scholar-reader.bridge` restarts it — CLAUDE.md's working agreement has sessions do this themselves.
+- A run is complete at its `result` line, or for a text reply at an `end_turn` `message_stop` (text and usage from the stream); the bridge answers then and stops the child, rather than waiting ~0.8–2.5 s for Claude Code to exit (`tools/bridge/stream.mjs`).
+- Started at login by the LaunchAgent `local.scholar-reader.bridge`, which `tools/bridge-login.mjs` (`npm run bridge:login`, `-- --off`) writes: this checkout's `tools/claude-bridge.mjs` under the absolute node and a PATH holding `claude`, `RunAtLoad`, restarted on an unsuccessful exit every 30 s, log `~/Library/Logs/scholar-reader-bridge.log`. After a change to the bridge, `launchctl kickstart -k gui/$(id -u)/local.scholar-reader.bridge` restarts it — CLAUDE.md has sessions do this themselves.
 - `node tools/bridge-probe.mjs [fixture] [provider]` runs one real outline through the running bridge and the real adapter (spends subscription usage).
 
-## Chat tab (step 22)
+## Chat tab
 - `model/chat-prompt.js`: `CHAT_PROMPT_VERSION`, `chatMessages(sections, meta, history, question)`, `splitCitations(text, sections)` (case- and space-insensitive title match; unmatched citations stay as text).
 - `model/openai-compat.js#chatText`: the same POST without `response_format`, streamed as text; `onText` gets the whole reply so far.
 - `background/chat.js`: `chat-plan`, `chat` (gate, quota check, then stream `chat-progress` to the tab, count the request, then `appendTurn`), `chat-history`, `chat-clear`. Watchdog as for outlines. `canChat`: any provider without `useNativeEndpoint`.
@@ -235,64 +198,65 @@ The escape hatch above, taken — by Ollama rather than by Gemini, and for a dif
 - Bridge: no schema means text mode. Text blocks are streamed, `result.result` is final, and earlier turns go into the prompt as a transcript, because `claude -p` takes one prompt.
 - `node tools/chat-probe.mjs [fixture] [provider] [port]`: two real turns through a running bridge (spends subscription usage).
 
-## Model-chosen sections (step 24)
+## Model-chosen sections
 - `extract/sections.js` returns `paper`: every line in reading order up to the References cut, as `{page, y, height, str}`. The viewer sends `{page, y, str}` of it with `plan` and `outline`.
 - `extract/anchor.js`: `paperText` (lines, `[page N]` markers, no numbers), `anchorSections(returned, paper)` (each heading found by normalised match at a line's start, run-in or wrapped onto a second line; forward search only; returns the placed prefix and the first heading that could not be placed), `bodiesOf` (each section's text and lines, heading lines excluded).
 - `model/paper-prompt.js`: instructions and schema `{sections: [{heading, title, bullets}] (1–40), tldr}`; bullet style by `promptStyle`. `model/model-sections.js#paperOutline`: one request, progressive fill of the placed prefix, then the full placement as the checksum.
 - `adapter.js#usesPaper(provider, paper)`: `sections: "model"`, whole-document, and a paper sent. `plan` then counts the paper's characters, reports `sectionCount: null`, `modelSections: true`.
 - Cached outline sections carry `heading`; `viewer/outline-sections.js#resolvedSections` places them on the live extraction every open for bullet location, and hands them to the chat tab.
-- `PROMPT_VERSION` 2: outlines from before are not served.
 - `tools/extract-pdf.mjs paper.pdf [--json out] [--lines]` runs the extension's own extraction in Node (pdf.js's Node build swapped in); `tools/paper-probe.mjs out.json [provider]` runs one real outline of it.
 
-## Sending the PDF (step 25)
+## Sending the PDF
 - `model/pdf.js`: `pdfFits` (≤ 30 MB, ≤ 100 pages), `sendsPdf(provider, pdf)` (`provider.pdf`), `pdfTokens` (per-page estimate on the descriptor: Claude 3,400, Gemini 1,700, measured), `pdfPart(bytes)` → `{type: "image_url", image_url: {url: "data:application/pdf;base64,…"}}`. Gemini's OpenAI-compatible endpoint refuses `type: "file"` and accepts this; the bridge maps it to `{type: "document", source: {type: "base64", media_type: "application/pdf"}}` and runs the CLI with `--input-format stream-json`.
 - The viewer reads the bytes once from pdf.js (`doc.getData()`); `plan`/`chat-plan` get `pdfInfo` (size, pages), `outline`/`chat` get `pdf` (bytes, pages).
 - `paper-prompt.js`: with a PDF, the system prompt says so and the user turn is `[pdf, "Outline the attached paper."]`; headings are copied as printed, number included. `chat-prompt.js`: the PDF in the first user turn, the section titles in the system prompt.
 - `extract/anchor.js` placement tiers, strictest first over the remaining paper: exact start (≤ 3 joined lines), numbering-free start (a one-word heading must be the whole line), suffix of a single line (≥ 3 words). Unplaced sections: kept, `unplaced: true`, target of the previous placed section (or the paper's first line), no lines; > 50% unplaced is malformed (`model-sections.js`) and gets no line placement in the viewer.
-- `PROMPT_VERSION` 3, `CHAT_PROMPT_VERSION` 2.
 
-## Typeset mathematics (step 26)
+## Typeset mathematics
 - `katex@0.16.22` (pinned) bundled into `viewer.js`; `dist/katex.css` and its fonts beside Inter's in `dist/fonts/`, with its MIT licence.
 - `viewer/math.js`: `mathParts` (`$$…$$`, `\[…\]`, `\(…\)`, `$…$` with the Markdown rule — no space just inside, no digit after the closing dollar; `\$` is a dollar), `mathNode` (KaTeX `throwOnError`, `trust: false`, `strict: "ignore"`, `maxSize` 20, `maxExpand` 500; failure → `.math-raw` with the source text), `withMath`, `repairTex` (backspace/form feed/tab before a letter back to `\b`/`\f`/`\t`).
 - Used by `outline-list.js` (bullets — inside one `.outline-bullet-text` span, the row being a flex box — and the TL;DR) and `chat-render.js` (reply text between citations).
-- `PROMPT_VERSION` 4, `CHAT_PROMPT_VERSION` 3.
 
-## Better jumps (step 27)
+## Jumps
 - Line records carry `x`, `right` (scale-1 viewport extent). `locate.js#spanTarget` returns `{page, y, yEnd, height, x, xEnd}`; `jump-flash.js` sizes the band to `x…xEnd` × scale; `pdfview.js` passes `x − 12` as the XYZ left.
 - `paper-prompt.js` schema: each section also has `quotes: string[]`, index-aligned with `bullets`; `model-sections.js#alignedQuotes` keeps the alignment. `outline-list.js`: `locateQuote(quote) || locateBullet(bullet)`, then the heading.
 - `viewer/locate-quote.js`: word stream with line indices, hyphen-joined; for each start on the quote's first or second word, the in-order match within quote length + 40%; most words wins, tightest span breaks ties; ≥ 4 words and ≥ 80% matched, else null.
 - `chat-prompt.js` `CITATION`: `[§ Title]` or `[§ Title | "quote"]`; `chat-render.js` places the quote in the section's lines.
 - `viewer/back-jump.js`: `remember()` (first of a run only, as a share of scroll height), `back()`, `dismiss()`; `#jump-back` in the PDF pane; Alt+← / Escape.
-- `PROMPT_VERSION` 5, `CHAT_PROMPT_VERSION` 4. `tools/paper-probe.mjs` reports quote/word/heading placement and takes `--out`.
+- `tools/paper-probe.mjs` reports quote/word/heading placement and takes `--out`.
 
-## Contents pages, Elsevier layouts (step 28)
+## Contents pages and Elsevier layouts
 - `anchor.js#starts`: a line that is the heading followed only by a 1–4 digit number is a contents entry and does not match. An unfound first section is placed at line 0, not unplaced.
 - `columns.js`: `columnVerdict` takes the median page ratio; `layoutPage` uses the page's own `detectColumns` boundary when it finds two columns; `rowsRunningAcross` marks every run of a row whose neighbouring runs meet across the boundary with a gap under max(4, 0.8 × body height) as spanning.
 - `locate-quote.js`: NFKC (ligature glyphs), Greek letters → names, two adjacent stream words may make one quoted word, window = 2 × quote length, accept ≥ 80% or (≥ 10 words and ≥ 60%).
 
 ## store/db.js
-IndexedDB `scholar-reader`, version 1:
+IndexedDB `scholar-reader`, version 4, opened only by the background:
 - `docs` — key `hash`; `{ hash, title, authors, doi, arxivId, pageCount, urls[], lastOpened, lastPage, scrollTop }`
 - `outlines` — key `hash:providerId:model:strategy:promptVersion`; `{ key, hash, sections, tldr, createdAt, usage }`
-- `consents` — key the same cache key; `{ key, hash, providerId, model, destination, grantedAt }`, plus a non-unique `hash` index so every grant for one document can be revoked together. Written only from the confirm card's accept path.
+- `consents` — key the cache key (or the chat key); `{ key, hash, providerId, model, destination, kind, grantedAt }`, with a `hash` index so every grant for one document can be revoked together.
 - `quota` — key `providerId:pacificDate`; `{ key, count }`
+- `inbox` (v3) — key the capture token; captured PDF bytes awaiting their viewer tab, 1 h TTL.
+- `chats` (v4) — key `hash`; the last 60 messages of the paper's conversation.
 
-Version 2 adds `consents`; the upgrade path creates the store and nothing else, since an absent grant is correctly read as "ask".
+Each upgrade only creates its store: an absent grant correctly reads as "ask". The manifest requests `unlimitedStorage`.
 
-Request `unlimitedStorage` in the manifest.
+## External services
+- **Claude Code** — logged in with the user's claude.ai subscription; the bridge refuses any other auth method.
+- **Google AI Studio** — the user's own key, entered in settings.
+- **Ollama** — the macOS desktop app, `gemma4:e4b` pulled. Because launchd starts it, `OLLAMA_ORIGINS` is set with `launchctl setenv OLLAMA_ORIGINS "moz-extension://*"` and the app restarted; that does not survive a reboot.
+- **addons.mozilla.org** — unlisted signing; the procedure is in README. Zen enforces Gecko's signature requirement and its `xpinstall.signatures.required` pref cannot be overridden, so a permanent install needs a signed XPI; `about:debugging` is the development path.
 
-## External service setup
-- **Google AI Studio** ✅ — key created by the user and held outside the repo; it is entered in extension settings at step 14. Tier 1 (paid). Real limits recorded in `model/providers.js`.
-- **Ollama** ✅ — installed 2026-09-13 as the macOS **desktop app** (Ollama 0.34.0), `gemma4:e4b` pulled. Because launchd starts it rather than a shell, `OLLAMA_ORIGINS` is set with `launchctl setenv OLLAMA_ORIGINS "moz-extension://*"` and the app restarted — not by exporting it in a terminal, which the app never sees. That setting does not survive a reboot.
-- **addons.mozilla.org** ⏸️ (post-v1) — `npm run package` produces the XPI and the source archive; the procedure is in README. User submits the built XPI for **unlisted** signing and downloads the signed file. Zen enforces Gecko's signature requirement and its `xpinstall.signatures.required` pref cannot be overridden, so unsigned permanent installation is impossible; `about:debugging` temporary loading is the development path and does not survive a restart.
-
-## Verification per area
-- **Interception** — an arXiv abstract-page PDF link and a publisher DOI link both open in the custom viewer; an opted-out origin does not.
-- **Extraction** — the debug panel lists correct section titles for ten papers from the user's own reading list, including at least three two-column ones. Saved to `fixtures/` as it goes.
-- **Adapter** — outline produced from a fixture with no PDF in the loop; a forced 429 falls through to the next same-destination provider, and stops rather than crossing to the local one. A response with a section dropped, added or retitled is rejected as malformed and never cached. Empty-text sections reach no provider.
-- **Schema enforcement** — establish on the first real call whether Gemini's OpenAI-compat layer honours `minItems`/`maxItems`: send an N-section payload and confirm N sections come back, and that no section carries fewer than 2 or more than 4 bullets. Record the answer in PROGRESS.md, because everything the schema does not enforce has to be caught by the adapter instead.
-- **Output quality under whole-document** — measured over the fixtures, not eyeballed on one: bullets outside 2–4, bullets over 20 words **as a function of position in the response** (the long-tail drift that a schema cannot prevent), and whether Results sections keep their reported numbers. `gpt3.json` is the stress case at 32 sections and ~51k est. tokens.
-- **Send confirmation** — opening a fresh paper issues **zero** provider requests until the button is clicked (devtools network panel, and the quota counter unchanged); reopening it after approval does not re-ask; changing the provider or bumping `PROMPT_VERSION` does re-ask; a scanned PDF shows no card at all.
-- **Cache** — reopening a document issues zero network requests (verify in devtools network panel).
-- **Quota** — counter increments per request and resets when the Pacific date string changes (test by stubbing the date function).
+## Testing
+`npm test` runs every suite in Node against stubs (`tools/test/`): no network, no key, no browser. What the suites hold, by area:
+- **Interception and capture** — `shouldIntercept` by Content-Type, the opt-out list, StreamFilter capture with no script written into the publisher's page, every fallback to the redirect.
+- **Partition** — neither page's import graph reaches an IndexedDB store.
+- **Extraction** — `lines`, `extract-rules`, `normalize`; regenerate `fixtures/` whenever extraction changes.
+- **Adapter and router** — a response with a section dropped, added or retitled is malformed and never cached; empty-text sections reach no provider; a 429 stops rather than crossing destinations; the gate refuses an unconsented send even when the page claims consent.
+- **Send confirmation** — a fresh paper makes zero provider requests until the button; reopening after approval does not re-ask; a different provider, model or prompt version does; a scanned PDF shows no card.
+- **Cache and quota** — a reopen makes zero requests; counters roll over on the Pacific date (stubbed).
+- **Jumps** — quote and word placement, contents pages skipped, the arrival band's column.
+- **Bridge** — a fake `claude` CLI: flags and stdin, no API key in the child's environment, stages, stall, Stop, early finish.
 - **Secrets** — `npm run check:secrets` passes on a build made after entering a real key in settings.
+
+Real-provider checks are by hand and spend quota or subscription usage: `npm run probe`, `tools/prod-check.mjs`, `tools/paper-probe.mjs`, `tools/chat-probe.mjs`, `tools/bridge-probe.mjs`. Behaviour in Zen is checked by the user.

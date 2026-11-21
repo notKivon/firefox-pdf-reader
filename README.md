@@ -1,188 +1,147 @@
 # Scholar Reader
 
-A Firefox/Zen extension that replaces the browser's PDF viewer with a two-pane academic reader: paper on the left, AI-generated section outline on the right.
+A Firefox / [Zen](https://zen-browser.app) extension that replaces the browser's PDF viewer with a two-pane reader for research papers. The paper is on the left. On the right is an outline of it, section by section, written by the model you pick. Clicking a bullet takes you to the sentence it summarises. A **Chat** tab answers questions about the paper and links each answer back to the section it came from.
 
-**Planning files — read all three at the start of every session:**
-- `CLAUDE.md` — what must be true (tech stack, code rules, domain logic, secrets policy)
-- `SPEC.md` — how to build it (file-by-file responsibilities, algorithms, verification)
-- `PROGRESS.md` — where the build is, and what's next
+![Scholar Reader showing "Attention Is All You Need" with a Claude Opus outline beside it](docs/screenshots/outline.png)
 
-This README holds only the things that live nowhere else: the session prompts and the load procedure.
+I built it for my own reading, so it is tested on Zen on macOS. Firefox should work too. It is not on addons.mozilla.org. The signed builds are unlisted and you install them from a file (see [Install](#install)).
 
-## Repository
+## Features
 
-<https://github.com/notKivon/firefox-pdf-reader> — **public**, `main` is the only
-branch, and the local clone tracks `origin/main`.
+- **Opens every PDF you click.** Any `application/pdf` response opens in the reader, including the extensionless links arXiv and publishers use. The extension keeps the browser's own download instead of fetching the file a second time. This matters for one-time links such as ScienceDirect's, which refuse a second request. A per-site opt-out and a "open in the browser's own viewer" button are there when you need the built-in viewer.
+- **Outlines by section.** One request covers the whole paper. A TL;DR comes first, then each section's key points in reading order, with results quoted as numbers. Bullets fill in while the model is still writing. A progress line shows the stage and elapsed time, and **Stop** cancels the run.
+- **Bullets that jump to the right sentence.** The model copies a short quote for each bullet. The viewer finds that quote among the paper's own lines and scrolls there, highlighting just that column. If the quote can't be found, it matches the bullet's words instead, and failing that it goes to the section heading. **Back** (or Alt+←) returns you to where you were reading.
+- **Chat about the paper.** Ask questions in the Chat tab. Answers cite sections as `§ links`, which can also point at a quoted sentence, and clicking one jumps there. Each paper keeps its own conversation.
+- **Typeset maths.** Equations in outlines and chat answers are rendered with KaTeX. KaTeX is bundled, so nothing is fetched.
+- **The model reads the PDF itself.** Claude and Gemini receive the original PDF (up to 100 pages / 30 MB), not a flattened text layer, so superscripts, equations and tables arrive intact. Longer papers are sent as text extracted in reading order, which also handles two-column layouts. The reference list is never sent.
+- **Nothing leaves without your say-so.** Before a paper goes anywhere, the outline pane tells you what will be sent and to whom, for example "Sends the 15-page PDF to Anthropic." Your approval is remembered per paper and per model. A cached outline reopens instantly and makes no network request.
+- **Reading comforts.** Dark theme by default, with a light theme. The reader remembers your page in each paper. You can resize the panes, type a page number or zoom level, save the PDF, and open local files.
 
-Public is deliberate. Nothing here is secret: provider base URLs, model IDs and
-rate limits are all public constants, and the one real secret — the Gemini API
-key — is entered in the extension's settings page and never touches the repo.
-It does mean history is permanent and world-readable, so the secrets policy
-below is a hard rule rather than tidiness.
+## Screenshots
 
----
+| | |
+|---|---|
+| ![The send confirmation: "Outline with Claude Opus 5.5 — Sends the 15-page PDF to Anthropic."](docs/screenshots/confirm.png) | ![An outline being written: stage, elapsed time, Stop, and the sections done so far](docs/screenshots/progress.png) |
+| **Before anything is sent**, the pane says what goes where. Choose the model from the dropdown. | **While the outline is written**, you see its progress and can stop it. Sections appear as they finish. |
+| ![A bullet jump landing on the scaled dot-product attention section, with typeset equations in the outline](docs/screenshots/jump.png) | ![The Chat tab answering a question with § citations linked to sections](docs/screenshots/chat.png) |
+| **Click a bullet** and the paper scrolls to the sentence it restates. **Back** returns you. | **Chat** answers cite the paper's sections, and each citation is a link. |
 
-## Session prompts
+*The paper shown is Vaswani et al., [Attention Is All You Need](https://arxiv.org/abs/1706.03762) (arXiv 1706.03762). Google grants permission to reproduce it for scholarly use with attribution. The outline and the answer are real Claude Opus 5.5 output.*
 
-### Starting a session
+## Models
 
-```
-Resume the build. Read CLAUDE.md, SPEC.md, and PROGRESS.md. Reconcile
-PROGRESS.md against git log and the working tree — trust git over
-PROGRESS.md and fix PROGRESS.md if they disagree. Run npm run build to
-confirm the tree is healthy. Then continue from the current step in
-PROGRESS.md, one step at a time, committing only tested working states. After finishing a step, await further input. Do not move onto the next step without explicit user permission.
-```
+| Model | Where the paper goes | How you pay | Used for |
+|---|---|---|---|
+| **Claude Opus 5.5** (default), Sonnet 5.5, Haiku 5.5 | Anthropic, through Claude Code on this computer | Your Claude subscription, no API key | Outline + chat |
+| **Gemini 4** Argon, Carbon, Hydrogen, Neon | Google, with your own API key | Your Gemini API key | Outline + chat |
+| **Gemma 4 E4B** via Ollama | Nowhere, it runs on this computer | Free | Outline only |
 
-### After a session was cut off mid-step
+The model never changes behind your back. If Opus reaches a usage limit, the pane says so, tells you when the limit resets, and offers the other models for you to pick from.
 
-```
-The previous session was cut off mid-step. Do NOT modify any files yet.
-First: read CLAUDE.md / SPEC.md / PROGRESS.md, run git status and git diff,
-and report exactly what state the tree is in — which step was in progress,
-what's done, what's untested. Then recommend one of: (a) discard uncommitted
-changes and redo the step cleanly, or (b) finish and test the step from where
-it stopped. Wait for my choice before touching anything.
-```
+## Install
 
-### Changing the spec
+### Signed build
 
-A new feature or a changed rule is its own step, never a casual mid-build edit.
+Download the `.xpi` from the [Releases](https://github.com/notKivon/firefox-pdf-reader/releases) page. In Zen or Firefox, open `about:addons`, click ⚙, choose **Install Add-on From File…**, and pick the file. Unlisted builds don't update themselves, so install each new release the same way.
 
-```
-This is a spec change, not a build step. Update CLAUDE.md (and SPEC.md if the
-implementation approach changes) to reflect: <the change>. Commit that on its
-own. Then add the resulting build steps to PROGRESS.md and stop — I'll start
-the implementation in the next step.
-```
+### From source
 
----
+Requires Node 22 / npm 10.
 
-## From a fresh clone
-
-Built and verified this way on Node 22 / npm 10:
-
-```
+```bash
 git clone https://github.com/notKivon/firefox-pdf-reader.git
-cd firefox-pdf-reader
-npm ci
-npm run build          # emits dist/ — the loadable extension
-npm test               # no network, no key, no browser needed
-npm run check:secrets
 ```
 
-## Loading into Zen
+```bash
+cd firefox-pdf-reader && npm ci && npm run build
+```
 
-Zen enforces Gecko's extension signature requirement and its
-`xpinstall.signatures.required` pref cannot be overridden, so during development
-the extension is loaded temporarily and **is lost on every browser restart**.
+Next, open `about:debugging#/runtime/this-firefox`, click **Load Temporary Add-on…**, and select `dist/manifest.json`. A temporary add-on is removed whenever the browser restarts. After each rebuild, press **Reload** on the add-on's card.
 
-1. `npm run build`
-2. Open `about:debugging#/runtime/this-firefox`
-3. **Load Temporary Add-on…** → select `dist/manifest.json`
-4. Reload after each rebuild with the **Reload** button on the extension's card.
-   **Reload** re-reads the folder the add-on was loaded from, so a build made in
-   another checkout is not picked up. A Claude Code worktree builds into
-   `.claude/worktrees/<name>/dist/`, which the file picker hides because the
-   name starts with a dot: press **⌘⇧G** in the picker and paste the path, or
-   **⌘⇧.** to show hidden folders.
+## Setup
 
-Then, once per profile:
+Open settings with the sliders button in the reader's toolbar, or from `about:addons` → Scholar Reader → Preferences.
 
-5. Open settings — the ⚙ in the viewer toolbar, or `about:addons` → Scholar Reader
-   → Preferences — and paste the Gemini API key. It is stored in
-   `browser.storage.local` for that profile. A browser restart removes a
-   temporary add-on, and Firefox may clear its storage along with it. The user
-   found no problem after a restart on 2026-09-13. If settings ever shows no key
-   after a restart, enter it again.
-6. **For Claude (the default):** run `npm run bridge` in this folder and leave it
-   running. It needs Claude Code logged in with your claude.ai subscription
-   (`claude auth status` shows `"authMethod": "claude.ai"`); it refuses to start
-   otherwise, and it never uses an `ANTHROPIC_API_KEY`, so outlines count against
-   your subscription's usage, not an API bill. The first run prints a token: paste
-   it into settings under **Claude bridge token**. The token is kept in
-   `~/.config/scholar-reader/bridge-token`. Opus 5.5 is the default; Sonnet 5.5
-   and Haiku 5.5 are in the provider list, in settings or the pane's switch.
-   The **Chat** tab, beside **Outline**, uses the same bridge. A bridge started
-   before the chat tab existed doesn't understand chat requests: stop it with
-   Ctrl+C and run `npm run bridge` again.
-   **To start it at every login instead,** run `npm run bridge:login` once. It
-   installs a LaunchAgent (`~/Library/LaunchAgents/local.scholar-reader.bridge.plist`)
-   that runs the bridge from this folder, logs to
-   `~/Library/Logs/scholar-reader-bridge.log`, and restarts it if it dies, or
-   retries every 30 s while Claude Code is not logged in. After pulling bridge
-   changes, restart it with `launchctl kickstart -k gui/$(id -u)/local.scholar-reader.bridge`.
-   Rerun `npm run bridge:login` after moving this folder or changing Node version,
-   because the agent holds both paths. `npm run bridge:login -- --off` removes it.
-7. **Only for the local model:** Ollama checks the request's `Origin`. With the
-   macOS desktop app, run `launchctl setenv OLLAMA_ORIGINS "moz-extension://*"` and
-   restart Ollama. This does not survive a reboot. If Ollama was started from a
-   shell with `ollama serve`, export the variable in that shell instead.
+### Claude (the default): the local bridge
 
-Permanent installation requires AMO *unlisted* signing. See below.
+Claude models go through a small local server, `tools/claude-bridge.mjs`. It runs [Claude Code](https://claude.com/claude-code) in headless mode under your own claude.ai login. Usage counts against your subscription, as interactive Claude Code does. The bridge removes any `ANTHROPIC_API_KEY` from its environment and refuses to start unless `claude auth status` shows a claude.ai login.
 
-## Signing a release (AMO, unlisted)
+1. Install Claude Code and log in with your subscription.
+2. Start the bridge at every login (a macOS LaunchAgent):
 
-1. Bump `version` in **both** `manifest.json` and `package.json`. AMO rejects a
-   version it has already signed. Commit.
-2. `npm run package`. This writes `web-ext-artifacts/scholar-reader-<version>.xpi`
-   and `scholar-reader-<version>-source.zip`. The second file is `git archive HEAD`.
-3. On <https://addons.mozilla.org/developers/addon/submit/distribution>, choose
-   **On your own**, which is unlisted, and upload the `.xpi`.
-4. When asked whether source code is needed, answer **Yes** and upload the
-   source zip, because `dist/` is bundled by esbuild. Paste the reviewer notes
-   below.
-5. Once it is signed, open Developer Hub → the add-on → **Manage Status &
-   Versions** → the version. **Clicking the signed `.xpi` link installs it
-   straight into the browser you are in**; no file is saved. That is enough for
-   this profile. Remove the temporary copy from `about:debugging` if one is loaded.
-6. To install it in another profile or browser, you need the file itself. Either
-   right-click the link → **Save Link As…**, or copy it out of the profile it was
-   installed into: `~/Library/Application Support/zen/Profiles/<profile>/extensions/scholar-reader@kevin.local.xpi`
-   is the signed file. Then, in the other browser: `about:addons` → ⚙ →
-   **Install Add-on From File…**, or drag the file onto the window. No AMO
-   sign-in is needed. A fresh profile needs the Gemini key entered in settings,
-   and unlisted add-ons never update themselves, so repeat this for each release.
+   ```bash
+   npm run bridge:login
+   ```
+
+   If you'd rather run it once in a terminal, use `npm run bridge` instead.
+3. Paste the token it prints into settings → **Claude bridge token**. The token is stored in `~/.config/scholar-reader/bridge-token`.
+
+The bridge listens only on `127.0.0.1:8765` and answers only requests that come from the extension and carry the token. Its log is at `~/Library/Logs/scholar-reader-bridge.log`. After pulling changes to `tools/bridge/`, restart it:
+
+```bash
+launchctl kickstart -k gui/$(id -u)/local.scholar-reader.bridge
+```
+
+Rerun `npm run bridge:login` after moving the checkout or changing Node version. To remove the LaunchAgent, run `npm run bridge:login -- --off`.
+
+### Gemini
+
+Create a key at [Google AI Studio](https://aistudio.google.com) and paste it into settings. The key is stored only in the extension's `storage.local`.
+
+### Local model (Ollama)
+
+Install [Ollama](https://ollama.com), run `ollama pull gemma4:e4b`, and allow the extension's origin. For the macOS app:
+
+```bash
+launchctl setenv OLLAMA_ORIGINS "moz-extension://*"
+```
+
+Restart Ollama afterwards. This setting does not survive a reboot. If you run `ollama serve` in a terminal, export the variable in that shell instead.
+
+## Using it
+
+1. Click any PDF link. The paper opens in the reader.
+2. In the outline pane, choose a model and press **Generate outline**. The pane says what will be sent before you press it.
+3. Click a bullet to jump to the sentence it summarises. Press **Back** or Alt+← to return.
+4. Switch to **Chat** to ask questions. The line above the box says what **Send** shares and with whom, and pressing Send approves it for that paper. **New chat** starts over.
+5. For a PDF on disk, click the folder button, or the toolbar button when no paper is open.
+
+## Development
+
+| Command | |
+|---|---|
+| `npm run build` | Bundle into `dist/` (esbuild, no minification) |
+| `npm run watch` | Rebuild on change |
+| `npm test` | Unit and integration tests in Node, against stubs: no network, key or browser needed |
+| `npm run check:secrets` | Fail if `dist/` or any tracked file contains something shaped like an API key |
+| `npm run package` | Build, secrets check, `web-ext lint`, then write the XPI and a source archive to `web-ext-artifacts/`. Refuses an uncommitted tree. |
+| `npm run bridge` / `bridge:login` | Run the Claude bridge now / at every login |
+| `npm run probe` | Send one fixture to a real provider and report outline quality. Uses real quota. |
+
+The code is plain JavaScript in ES modules with no framework. It uses `pdfjs-dist`'s `PDFViewer`, KaTeX, and Inter, all bundled. **[CLAUDE.md](CLAUDE.md)** lists the rules the code has to keep: when text may be sent, how documents are identified and cached, and where a jump's position may come from. **[SPEC.md](SPEC.md)** describes how each part works. **[PROGRESS.md](PROGRESS.md)** has the release history, the open issues, and the design decisions with their reasons.
+
+### Signing a release (AMO, unlisted)
+
+1. Bump `version` in both `manifest.json` and `package.json`, then commit.
+2. Run `npm run package` to write `web-ext-artifacts/scholar-reader-<version>.xpi` and `…-source.zip`.
+3. At <https://addons.mozilla.org/developers/addon/submit/distribution>, choose **On your own** and upload the XPI. When asked for source code, upload the source zip (`dist/` is bundled by esbuild) along with the reviewer notes below.
+4. Once it is signed, go to Developer Hub → the add-on → **Manage Status & Versions** → the version. Clicking the signed `.xpi` link installs it straight into the browser you're in. To get the file itself, use **Save Link As…**, or copy it out of the profile: `~/Library/Application Support/zen/Profiles/<profile>/extensions/scholar-reader@kevin.local.xpi`.
 
 Reviewer notes:
 
 ```
 Build: Node 22, npm 10. In the source archive: `npm ci && npm run build`.
 The extension is the resulting dist/ directory, which matches the uploaded XPI
-file for file. esbuild bundles without minifying. The only third-party runtime
-code is pdfjs-dist (see package-lock.json); its worker, cmaps, fonts and wasm
-are copied unmodified from node_modules/pdfjs-dist. The web-ext lint warnings
-all come from that pdf.js code.
-Data: the text of the open PDF is sent to Google's Gemini API (key supplied by
-the user) or to a local Ollama server only after the user confirms each
-document in the page. No data goes to the developer.
+file for file. esbuild bundles without minifying. Third-party runtime code is
+pdfjs-dist, KaTeX and the Inter font (see package-lock.json); pdf.js's worker,
+cmaps, fonts and wasm are copied unmodified from node_modules. The web-ext lint
+warnings all come from that pdf.js code.
+Data: the open PDF, or its extracted text, is sent to the model the user picks
+(Anthropic via a local Claude Code bridge, Google's Gemini API with the user's
+key, or a local Ollama server), and only after the user confirms each document
+in the page. No data goes to the developer.
 ```
-
-
-## Commands
-
-| | |
-|---|---|
-| `npm run build` | Bundle to `dist/` |
-| `npm run watch` | Rebuild on change |
-| `npm test` | Unit and integration tests in Node, against stubs — no network |
-| `npm run package` | Build, secrets gate, lint, then write the XPI and its source archive to `web-ext-artifacts/`. Refuses an uncommitted tree. |
-| `npm run check:secrets` | Fail if `dist/` or any tracked file contains an API key. Run before any packaging or signing step. |
-| `npm run bridge` | Start the local Claude bridge (Opus/Sonnet/Haiku on your Claude Code subscription). First run prints the token to paste into settings. |
-| `npm run bridge:login` | Start the bridge at every login as a LaunchAgent, and now; `-- --off` removes it. Log: `~/Library/Logs/scholar-reader-bridge.log`. |
-| `npm run probe` | Send one fixture to a real provider and report outline quality — spends real quota; see PROGRESS.md |
 
 ## Secrets
 
-No API key ever goes in this repo. Keys are entered in the extension's own
-settings page and live in `browser.storage.local`. See the secrets policy in
-`CLAUDE.md`.
-
-`.gitignore` covers the paths a key could plausibly reach: `dist/`, `.env`,
-`*.key`, `*.xpi`. `npm run check:secrets` scans two things. It checks the
-**built bundle** for anything key-shaped, which is what matters before
-packaging. It also checks **every tracked file** for full-length keys, since
-the tests use short fake ones on purpose. It cannot see a key that was never
-`git add`ed, and it runs only when invoked. On a public repo, a pushed key
-cannot be fixed by deleting it: treat it as burned and rotate it at
-aistudio.google.com.
+No API key is ever committed. Keys are entered on the settings page and kept in `browser.storage.local`. `.gitignore` covers `dist/`, `.env`, `*.key` and `*.xpi`. `npm run check:secrets` scans the built bundle for anything shaped like a key, and every tracked file for full-length keys. Run it before every packaging step. The repository is public, so deleting a key that was pushed does not help: revoke it and create a new one.

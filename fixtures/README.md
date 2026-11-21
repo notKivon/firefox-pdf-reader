@@ -1,7 +1,7 @@
 # Extraction fixtures
 
-Sections extracted by `src/extract/` from public arXiv PDFs, saved so step 7 can
-iterate on prompts without re-parsing a PDF each time. Regenerate them whenever
+Sections extracted by `src/extract/` from public arXiv PDFs, saved so prompts can be
+iterated on without re-parsing a PDF each time. Regenerate them whenever
 extraction changes — a stale fixture is worse than none.
 
 | fixture | arXiv | path | columns | sections |
@@ -22,6 +22,6 @@ extraction changes — a stale fixture is worse than none.
 outline, `headings` from the text-layer heuristics. Both are exercised here, and
 both column layouts.
 
-These are a stand-in for the user's own reading list, which step 6 asks for; they
+These are a stand-in for the user's own reading list; they
 were chosen to span two-column and single-column templates and both extraction
 paths. Worth re-checking against real reading-list papers in the viewer.
